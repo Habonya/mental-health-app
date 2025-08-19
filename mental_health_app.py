@@ -14,16 +14,16 @@ if "history" not in st.session_state:
 
 # --- Ask Questions ---
 with st.form("assessment_form"):
-    sleep = st.radio("How is your sleep quality?", ["Good", "Poor"])
-    hours = st.number_input("How many hours do you sleep per night?", min_value=0, max_value=24, value=7)
+    sleep = st.radio("How is your sleep quality?", ["Select...", "Good", "Poor"])
+    hours = st.number_input("How many hours do you sleep per night?", min_value=0, max_value=24, value=0)
 
-    mood = st.radio("How is your mood?", ["Good", "Low"])
-    interest = st.radio("Do you feel interested in things?", ["Yes", "No"])
-    worry = st.radio("Are you experiencing persistent worry?", ["Yes", "No"])
-    panic = st.radio("Have you had panic attacks?", ["Yes", "No"])
-    workload = st.radio("Is your workload high?", ["Yes", "No"])
-    tired = st.radio("Are you feeling tired often?", ["Yes", "No"])
-    motivation = st.radio("Do you lack motivation?", ["Yes", "No"])
+    mood = st.radio("How is your mood?", ["Select...", "Good", "Low"])
+    interest = st.radio("Do you feel interested in things?", ["Select...", "Yes", "No"])
+    worry = st.radio("Are you experiencing persistent worry?", ["Select...", "Yes", "No"])
+    panic = st.radio("Have you had panic attacks?", ["Select...", "Yes", "No"])
+    workload = st.radio("Is your workload high?", ["Select...", "Yes", "No"])
+    tired = st.radio("Are you feeling tired often?", ["Select...", "Yes", "No"])
+    motivation = st.radio("Do you lack motivation?", ["Select...", "Yes", "No"])
 
     submitted = st.form_submit_button("Get Assessment")
 
@@ -123,16 +123,30 @@ def infer_diagnosis():
 
 # --- Run inference when form is submitted ---
 if submitted:
-    result = infer_diagnosis()
+    # --- Validation Check ---
+    if (
+        sleep == "Select..." or
+        mood == "Select..." or
+        interest == "Select..." or
+        worry == "Select..." or
+        panic == "Select..." or
+        workload == "Select..." or
+        tired == "Select..." or
+        motivation == "Select..." or
+        hours == 0
+    ):
+        st.warning("⚠️ Please answer all questions before submitting.")
+    else:
+        result = infer_diagnosis()
 
-    # --- Show Results ---
-    st.subheader("📝 Assessment Result")
-    st.write(f"**Diagnosis:** {result['diagnosis']}")
-    st.write(f"**Explanation:** {result['explanation']}")
-    st.info(f"**Advice:** {result['advice']}")
+        # --- Show Results ---
+        st.subheader("📝 Assessment Result")
+        st.write(f"**Diagnosis:** {result['diagnosis']}")
+        st.write(f"**Explanation:** {result['explanation']}")
+        st.info(f"**Advice:** {result['advice']}")
 
-    # --- Show history for transparency (Means–Ends Analysis) ---
-    with st.expander("🗂️ Reasoning Path (History)"):
-        st.write("The system considered your symptoms step by step. Here are past diagnoses in this session:")
-        for i, diag in enumerate(st.session_state.history, 1):
-            st.write(f"{i}. {diag}")
+        # --- Show history for transparency (Means–Ends Analysis) ---
+        with st.expander("🗂️ Reasoning Path (History)"):
+            st.write("The system considered your symptoms step by step. Here are past diagnoses in this session:")
+            for i, diag in enumerate(st.session_state.history, 1):
+                st.write(f"{i}. {diag}")
