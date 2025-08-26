@@ -1,13 +1,15 @@
 import streamlit as st
 
-# ---------------- Page Setup ----------------
+# ====================== Page Setup ======================
 st.set_page_config(page_title="Mental Health Support System", layout="centered")
 
 st.title("🧠 Mental Health Support System")
-st.write("This is an **advisory tool only** and does not replace professional care. "
-         "If you're in crisis, please seek immediate help.")
+st.write(
+    "This is an **advisory tool only** and does not replace professional care. "
+    "If you're in crisis or feel unsafe, seek immediate help."
+)
 
-# ---------------- Session State Defaults ----------------
+# ====================== Session State Defaults ======================
 def _ensure_defaults():
     defaults = {
         "step": 1,
@@ -20,10 +22,8 @@ def _ensure_defaults():
         "workload": "Select...",
         "tired": "Select...",
         "motivation": "Select...",
-        "last_diagnosis": None,
-        "history": [],
-        "result": None,
-        "ranked_rules": []
+        "last_diagnosis": None,   # for Refractoriness/Recency
+        "result": None
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -31,7 +31,7 @@ def _ensure_defaults():
 
 _ensure_defaults()
 
-# ---------------- Helpers: Navigation & Validation ----------------
+# ====================== Helpers: Navigation & Validation ======================
 TOTAL_STEPS = 3
 
 def progress_bar():
@@ -46,17 +46,14 @@ def prev_step():
         st.session_state.step -= 1
 
 def reset_assessment():
-    keep_keys = ("last_diagnosis", "history")
-    last = {k: st.session_state[k] for k in keep_keys if k in st.session_state}
+    keep = {"last_diagnosis": st.session_state.get("last_diagnosis")}
     for key in list(st.session_state.keys()):
         del st.session_state[key]
     _ensure_defaults()
-    for k, v in last.items():
-        st.session_state[k] = v
+    st.session_state.update({k: v for k, v in keep.items() if v is not None})
     st.experimental_rerun()
 
 def validate_step(step):
-    """Return (ok, msg) for the current step."""
     s = st.session_state
     if step == 1:
         if s.sleep == "Select...":
@@ -74,121 +71,155 @@ def validate_step(step):
             ("panic", "panic attacks"),
             ("workload", "workload"),
             ("tired", "tiredness"),
-            ("motivation", "motivation")
+            ("motivation", "motivation"),
         ]:
             if st.session_state[field] == "Select...":
                 return False, f"Please answer the question about {label}."
     return True, ""
 
-# ---------------- Rule Base ----------------
+# ====================== Rule Base ======================
+# Each rule has:
+# - conditions: boolean function
+# - diagnosis, explanation, advice
+# - specificity: more conditions -> higher number
+# - priority: used when multiple rules have same specificity (domain importance)
 def rules(s):
     return [
         {
             "conditions": lambda: s.worry == "Yes" and s.panic == "Yes",
             "diagnosis": "Anxiety",
-            "advice": "Try deep breathing, regular physical activity, and consider professional support.",
-            "explanation": "Persistent worry and panic attacks are core indicators of anxiety disorders.",
-            "specificity": 3
+            "explanation": (
+                "Your answers indicate persistent worry and panic symptoms. "
+                "Anxiety disorders are commonly characterized by excessive worry "
+                "and physical arousal (e.g., racing heart, shortness of breath), "
+                "as described in widely used clinical guidelines (e.g., DSM-5/WHO)."
+            ),
+            "advice": "Practice slow breathing/grounding and consider speaking with a clinician.",
+            "specificity": 3,
+            "priority": 3,
         },
         {
             "conditions": lambda: s.sleep == "Poor" and s.mood == "Low" and s.interest == "No",
             "diagnosis": "Depression",
-            "advice": "Consider therapy, maintain a regular sleep routine, and stay connected with loved ones.",
-            "explanation": "Poor sleep, low mood, and loss of interest are hallmark symptoms of depression.",
-            "specificity": 4
+            "explanation": (
+                "Low mood, loss of interest/pleasure, and sleep disturbance align with "
+                "common features of depressive episodes described in DSM-5/WHO. "
+                "These symptoms often last most days for at least two weeks and impact daily functioning."
+            ),
+            "advice": "Keep routine, stay connected, and arrange an evaluation with a mental health professional.",
+            "specificity": 4,
+            "priority": 4,
         },
         {
             "conditions": lambda: s.workload == "Yes" and s.tired == "Yes" and s.motivation == "Yes",
             "diagnosis": "Burnout",
-            "advice": "Reduce workload, take breaks, and rest. Seek professional support if symptoms persist.",
-            "explanation": "High workload + tiredness + lack of motivation suggests burnout.",
-            "specificity": 3
+            "explanation": (
+                "High, sustained workload with fatigue and reduced motivation suggests work-related burnout, "
+                "an occupational phenomenon characterized by exhaustion and reduced efficacy."
+            ),
+            "advice": "Reduce load where possible, take restorative breaks, and discuss support options at work/school.",
+            "specificity": 3,
+            "priority": 3,
         },
         {
             "conditions": lambda: s.sleep == "Poor" and s.tired == "Yes" and s.hours < 5,
             "diagnosis": "Sleep Deprivation",
-            "advice": "Aim for 6–8 hours of quality sleep. Reduce screen time before bed.",
-            "explanation": "Poor sleep, tiredness, and <5 hours rest strongly suggest sleep deprivation.",
-            "specificity": 4
+            "explanation": (
+                "Poor sleep quality with less than ~5 hours is consistent with sleep deprivation, "
+                "which commonly leads to fatigue, poor concentration, and mood changes."
+            ),
+            "advice": "Prioritize sleep hygiene and aim for 6–8 hours consistently.",
+            "specificity": 4,
+            "priority": 4,
         },
         {
             "conditions": lambda: s.worry == "Yes" and s.mood == "Low" and s.tired == "Yes",
             "diagnosis": "Stress Overload",
-            "advice": "Try journaling, walking, or meditation. Seek help if stress continues.",
-            "explanation": "Persistent worry, low mood, and fatigue suggest overwhelming stress.",
-            "specificity": 3
+            "explanation": (
+                "Persistent stress can present as ongoing worry, lowered mood, and fatigue. "
+                "Managing stressors and recovery time helps prevent escalation."
+            ),
+            "advice": "Try journaling, light activity, and structured breaks; review stressors you can change.",
+            "specificity": 3,
+            "priority": 2,
         },
         {
             "conditions": lambda: s.mood == "Low" and s.motivation == "Yes" and s.interest == "No",
             "diagnosis": "Possible Depression",
-            "advice": "Monitor your symptoms and consider professional consultation.",
-            "explanation": "Low mood, loss of interest, and lack of motivation are depressive tendencies.",
-            "specificity": 2
+            "explanation": (
+                "Low mood with loss of interest and reduced motivation is concerning for depressive patterns, "
+                "though your answers may not meet full clinical criteria."
+            ),
+            "advice": "Monitor symptoms and seek a professional assessment.",
+            "specificity": 2,
+            "priority": 2,
         },
         {
             "conditions": lambda: s.tired == "Yes" and s.motivation == "Yes" and s.sleep == "Good",
             "diagnosis": "Emotional Fatigue",
-            "advice": "Take breaks, enjoy hobbies, and stay socially connected.",
-            "explanation": "Good sleep but tired + unmotivated indicates emotional fatigue.",
-            "specificity": 2
+            "explanation": (
+                "Even with adequate sleep, persistent tiredness and low drive can reflect emotional exhaustion "
+                "from prolonged strain."
+            ),
+            "advice": "Plan pleasant activities, set small goals, and connect with supportive people.",
+            "specificity": 2,
+            "priority": 1,
         },
         {
-            "conditions": lambda: s.worry == "Yes" or s.tired == "Yes" or s.mood == "Low" or s.motivation == "Yes",
+            "conditions": lambda: (
+                s.worry == "Yes" or s.tired == "Yes" or s.mood == "Low" or s.motivation == "Yes"
+            ),
             "diagnosis": "Mild Emotional Distress",
-            "advice": "Talk to someone, get good sleep, and care for your physical health.",
-            "explanation": "Some level of worry, tiredness, or low mood indicates mild distress.",
-            "specificity": 1
-        }
+            "explanation": (
+                "Your answers suggest some emotional strain, but not a specific pattern. "
+                "Simple self-care and monitoring can help."
+            ),
+            "advice": "Talk to someone you trust and prioritize rest and routine.",
+            "specificity": 1,
+            "priority": 1,
+        },
     ]
 
-# ---------------- Inference (Conflict Resolution) ----------------
+# ====================== Inference with Conflict Resolution ======================
 def infer_diagnosis():
+    """
+    Conflict resolution:
+    1) Specificity: choose rule with highest 'specificity'
+    2) Priority: tie-break with domain 'priority'
+    3) Lexical order: final tie-break is the code order (stable sort)
+    4) Refractoriness: if same as last diagnosis, return a minimal/avoid-repeat message
+    5) Recency: store the latest diagnosis in session state
+    """
     s = st.session_state
-    all_rules = rules(s)
-    matching = [r for r in all_rules if r["conditions"]()]
+    matching = [r for r in rules(s) if r["conditions"]()]
 
     if not matching:
-        st.session_state.ranked_rules = []
         return {
             "diagnosis": "Unclear",
-            "advice": "Consider consulting a mental health professional.",
-            "explanation": "Your answers do not match a specific condition.",
-            "strategy_used": "No matching rules"
+            "explanation": (
+                "Your answers do not match a specific pattern in this tool. "
+                "Consider discussing your concerns with a licensed professional."
+            ),
+            "advice": "Keep tracking sleep, mood, and energy; bring notes to your appointment."
         }
 
-    # Sort by specificity (highest first)
-    matching.sort(key=lambda r: r["specificity"], reverse=True)
-    st.session_state.ranked_rules = matching  # keep full ranking for audit
+    # Sort by specificity then priority (descending). Python's sort is stable, so original order is the last tiebreaker.
+    matching.sort(key=lambda r: (r["specificity"], r["priority"]), reverse=True)
+    chosen = matching[0]
 
-    top_specificity = matching[0]["specificity"]
-    most_specific = [r for r in matching if r["specificity"] == top_specificity]
-
-    if len(most_specific) > 1:
-        strategy = "Specificity + Priority (Lexical Order)"
-    else:
-        strategy = "Specificity"
-
-    chosen = most_specific[0]
-
-    # Refactoriness
+    # Refractoriness: avoid re-surfacing the same diagnosis immediately
     if s.last_diagnosis == chosen["diagnosis"]:
         return {
             "diagnosis": chosen["diagnosis"],
-            "advice": "You have already received this advice. Please monitor changes in your condition.",
-            "explanation": "This diagnosis has already been made earlier based on your symptoms.",
-            "strategy_used": "Refactoriness (avoiding repeated diagnosis)"
+            "explanation": "This is the same result as your previous assessment with similar answers.",
+            "advice": "Monitor changes and consult a licensed clinician for a full evaluation."
         }
 
-    # Recency
+    # Recency: remember last diagnosis
     s.last_diagnosis = chosen["diagnosis"]
-    s.history.append(chosen["diagnosis"])
-    if len(s.history) > 20:
-        s.history = s.history[-20:]
-
-    chosen["strategy_used"] = strategy + " → Recency applied"
     return chosen
 
-# ---------------- Personalized Advice Tiers ----------------
+# ====================== Personalized Advice Tiers ======================
 SEVERITY = {
     "Depression": 3,
     "Anxiety": 3,
@@ -198,7 +229,7 @@ SEVERITY = {
     "Possible Depression": 2,
     "Emotional Fatigue": 1,
     "Mild Emotional Distress": 1,
-    "Unclear": 1
+    "Unclear": 1,
 }
 
 def build_personalized_advice(result):
@@ -208,49 +239,55 @@ def build_personalized_advice(result):
 
     immediate, routine, professional = [], [], []
 
+    # Core tiers (emphasis increases with severity)
     if severity >= 3:
         immediate += [
-            "Consider reaching out to a trusted person today.",
-            "Practice a short grounding/breathing exercise (3–5 minutes)."
+            "Reach out to a trusted person today.",
+            "Try a brief grounding/breathing exercise (3–5 minutes).",
         ]
         professional += [
-            "Book an appointment with a licensed mental health professional.",
-            "If you feel unsafe or in crisis, seek immediate help."
+            "**Most Important:** Book an appointment with a licensed mental health professional.",
+            "If you feel unsafe or in crisis, seek immediate help.",
         ]
     elif severity == 2:
         immediate += [
-            "Schedule a short break or light activity today (walk, stretch).",
-            "Try journaling: *What is one small thing I can improve this week?*"
+            "Take a short restorative break today (walk, stretch, hydration).",
+            "Try a simple check-in journal: *How am I feeling? What is one small action I can take?*",
         ]
         routine += [
-            "Set a consistent sleep/wake time for the next 7 days.",
-            "Plan micro-breaks during work/study blocks (5 min every hour)."
+            "Keep a consistent sleep/wake schedule for the next week.",
+            "Plan micro-breaks during work/study (5 minutes each hour).",
+        ]
+        professional += [
+            "**Recommended:** Consider a professional consultation if symptoms persist or worsen.",
         ]
     else:
         immediate += ["Do one pleasant activity today (music, nature, call a friend)."]
         routine += ["Notice patterns: what improves or worsens your mood?"]
 
-    # Add personalized factors
+    # Personalized add-ons from inputs
     if s.workload == "Yes":
-        routine.append("Negotiate workload or set clearer boundaries this week.")
+        routine.append("Review workload and set boundaries for the coming week.")
     if s.sleep == "Poor" or s.hours < 6:
-        routine.append("Improve sleep hygiene: no screens 1 hr before bed, consistent bedtime.")
+        routine.append("Follow basic sleep hygiene: limit screens 1 hour before bed, keep the room dark, consistent bedtime.")
     if s.worry == "Yes":
-        immediate.append("Try 4-7-8 breathing: inhale 4, hold 7, exhale 8 (x4).")
+        immediate.append("Try a 4-7-8 breathing cycle (inhale 4s, hold 7s, exhale 8s) for 4 rounds.")
     if s.panic == "Yes":
-        immediate.append("Grounding technique: 5 things see, 4 touch, 3 hear, 2 smell, 1 taste.")
+        immediate.append("Use a grounding technique: 5 things you see, 4 touch, 3 hear, 2 smell, 1 taste.")
     if s.motivation == "Yes":
-        routine.append("Use the 2-minute rule: start with a tiny step of the task.")
+        routine.append("Use the 2-minute rule: start with a tiny version of the task to overcome inertia.")
     if s.interest == "No":
-        routine.append("Schedule a small activity you used to enjoy (15–20 min).")
+        routine.append("Schedule one small activity you used to enjoy (15–20 minutes).")
 
+    # De-duplicate while keeping order
+    dedup = lambda items: list(dict.fromkeys(items))
     return {
-        "immediate": list(dict.fromkeys(immediate)),
-        "routine": list(dict.fromkeys(routine)),
-        "professional": list(dict.fromkeys(professional))
+        "immediate": dedup(immediate),
+        "routine": dedup(routine),
+        "professional": dedup(professional),
     }
 
-# ---------------- Wizard UI ----------------
+# ====================== Wizard UI ======================
 st.caption("Answer each step below. Your progress saves as you go.")
 progress_bar()
 
@@ -258,15 +295,17 @@ progress_bar()
 if st.session_state.step == 1:
     st.subheader("Step 1/3 · Sleep")
     st.radio("How is your sleep quality?", ["Select...", "Good", "Poor"], key="sleep")
-    st.number_input("How many hours do you sleep per night?",
-                    min_value=0, max_value=24, value=st.session_state.hours, key="hours")
+    st.number_input(
+        "How many hours do you sleep per night?",
+        min_value=0, max_value=24, value=st.session_state.hours, key="hours",
+    )
     c1, c2, c3 = st.columns([1, 1, 2])
-    with c1: st.button("Reset", on_click=reset_assessment)
+    with c1:
+        st.button("Reset", on_click=reset_assessment)
     with c3:
         if st.button("Next →"):
             ok, msg = validate_step(1)
-            if ok: next_step()
-            else: st.warning(f"⚠️ {msg}")
+            st.warning(f"⚠️ {msg}") if not ok else next_step()
 
 # STEP 2
 elif st.session_state.step == 2:
@@ -274,13 +313,14 @@ elif st.session_state.step == 2:
     st.radio("How is your mood?", ["Select...", "Good", "Low"], key="mood")
     st.radio("Do you feel interested in things?", ["Select...", "Yes", "No"], key="interest")
     c1, c2, c3 = st.columns([1, 1, 2])
-    with c1: st.button("← Back", on_click=prev_step)
-    with c2: st.button("Reset", on_click=reset_assessment)
+    with c1:
+        st.button("← Back", on_click=prev_step)
+    with c2:
+        st.button("Reset", on_click=reset_assessment)
     with c3:
         if st.button("Next →"):
             ok, msg = validate_step(2)
-            if ok: next_step()
-            else: st.warning(f"⚠️ {msg}")
+            st.warning(f"⚠️ {msg}") if not ok else next_step()
 
 # STEP 3
 elif st.session_state.step == 3:
@@ -290,26 +330,29 @@ elif st.session_state.step == 3:
     st.radio("Is your workload high?", ["Select...", "Yes", "No"], key="workload")
     st.radio("Are you feeling tired often?", ["Select...", "Yes", "No"], key="tired")
     st.radio("Do you lack motivation?", ["Select...", "Yes", "No"], key="motivation")
+
     c1, c2, c3 = st.columns([1, 1, 2])
-    with c1: st.button("← Back", on_click=prev_step)
-    with c2: st.button("Reset", on_click=reset_assessment)
+    with c1:
+        st.button("← Back", on_click=prev_step)
+    with c2:
+        st.button("Reset", on_click=reset_assessment)
     with c3:
         if st.button("Run Assessment ✅"):
             ok, msg = validate_step(3)
-            if ok: st.session_state.result = infer_diagnosis()
-            else: st.warning(f"⚠️ {msg}")
+            if not ok:
+                st.warning(f"⚠️ {msg}")
+            else:
+                st.session_state.result = infer_diagnosis()
 
-# ---------------- Results & Advice ----------------
+# ====================== Results & Advice ======================
 if st.session_state.result:
     res = st.session_state.result
     st.markdown("---")
     st.subheader("📝 Assessment Result")
     st.write(f"**Diagnosis:** {res['diagnosis']}")
     st.write(f"**Explanation:** {res['explanation']}")
-    st.write(f"**Conflict Resolution Strategy Used:** {res['strategy_used']}")
     st.info(f"**Base Advice:** {res['advice']}")
 
-    # Personalized tiers
     tiers = build_personalized_advice(res)
     st.markdown("### 🎯 Personalized Advice Tiers")
     if tiers["immediate"]:
@@ -325,15 +368,8 @@ if st.session_state.result:
         for tip in tiers["professional"]:
             st.markdown(f"- {tip}")
 
-    # Transparency
-    with st.expander("🗂️ Reasoning Path (Audit Trail)"):
-        st.write("Past diagnoses in this session:")
-        for i, diag in enumerate(st.session_state.history, 1):
-            st.write(f"{i}. {diag}")
-        if st.session_state.ranked_rules:
-            st.write("---")
-            st.write("Rules considered (ranked by specificity):")
-            for r in st.session_state.ranked_rules:
-                st.write(f"- {r['diagnosis']} (specificity {r['specificity']})")
+    st.warning(
+        "⚠️ This tool provides guidance only. Please seek evaluation and care from a licensed mental health professional."
+    )
 
     st.button("Start New Assessment", on_click=reset_assessment)
