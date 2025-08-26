@@ -4,7 +4,8 @@ import streamlit as st
 st.set_page_config(page_title="Mental Health Support System", layout="centered")
 
 st.title("🧠 Mental Health Support System")
-st.write("This is an **advisory tool only** and does not replace professional care. If you're in crisis, please seek immediate help.")
+st.write("This is an **advisory tool only** and does not replace professional care. "
+         "If you're in crisis, please seek immediate help.")
 
 # ---------------- Session State Defaults ----------------
 def _ensure_defaults():
@@ -21,7 +22,8 @@ def _ensure_defaults():
         "motivation": "Select...",
         "last_diagnosis": None,
         "history": [],
-        "result": None
+        "result": None,
+        "ranked_rules": []
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -78,7 +80,7 @@ def validate_step(step):
                 return False, f"Please answer the question about {label}."
     return True, ""
 
-# ---------------- Rule Base (with specificity) ----------------
+# ---------------- Rule Base ----------------
 def rules(s):
     return [
         {
@@ -139,37 +141,51 @@ def rules(s):
         }
     ]
 
-# ---------------- Inference (with conflict resolution) ----------------
+# ---------------- Inference (Conflict Resolution) ----------------
 def infer_diagnosis():
     s = st.session_state
-    matching = [r for r in rules(s) if r["conditions"]()]
+    all_rules = rules(s)
+    matching = [r for r in all_rules if r["conditions"]()]
 
     if not matching:
-        result = {
+        st.session_state.ranked_rules = []
+        return {
             "diagnosis": "Unclear",
             "advice": "Consider consulting a mental health professional.",
-            "explanation": "Your answers do not match a specific condition."
+            "explanation": "Your answers do not match a specific condition.",
+            "strategy_used": "No matching rules"
         }
-        return result
 
-    # Strategy 1: Specificity
+    # Sort by specificity (highest first)
     matching.sort(key=lambda r: r["specificity"], reverse=True)
-    chosen = matching[0]
+    st.session_state.ranked_rules = matching  # keep full ranking for audit
 
-    # Strategy 2: Lexical order = list order (stable sort)
+    top_specificity = matching[0]["specificity"]
+    most_specific = [r for r in matching if r["specificity"] == top_specificity]
 
-    # Strategy 3: Refactoriness
+    if len(most_specific) > 1:
+        strategy = "Specificity + Priority (Lexical Order)"
+    else:
+        strategy = "Specificity"
+
+    chosen = most_specific[0]
+
+    # Refactoriness
     if s.last_diagnosis == chosen["diagnosis"]:
         return {
             "diagnosis": chosen["diagnosis"],
             "advice": "You have already received this advice. Please monitor changes in your condition.",
-            "explanation": "This diagnosis has already been made earlier based on your symptoms."
+            "explanation": "This diagnosis has already been made earlier based on your symptoms.",
+            "strategy_used": "Refactoriness (avoiding repeated diagnosis)"
         }
 
-    # Strategy 4: Recency
+    # Recency
     s.last_diagnosis = chosen["diagnosis"]
     s.history.append(chosen["diagnosis"])
+    if len(s.history) > 20:
+        s.history = s.history[-20:]
 
+    chosen["strategy_used"] = strategy + " → Recency applied"
     return chosen
 
 # ---------------- Personalized Advice Tiers ----------------
@@ -190,12 +206,8 @@ def build_personalized_advice(result):
     dx = result["diagnosis"]
     severity = SEVERITY.get(dx, 1)
 
-    # Base tiers
-    immediate = []
-    routine = []
-    professional = []
+    immediate, routine, professional = [], [], []
 
-    # General tiered suggestions
     if severity >= 3:
         immediate += [
             "Consider reaching out to a trusted person today.",
@@ -208,37 +220,32 @@ def build_personalized_advice(result):
     elif severity == 2:
         immediate += [
             "Schedule a short break or light activity today (walk, stretch).",
-            "Try a simple journaling prompt: *What is one small thing I can improve this week?*"
+            "Try journaling: *What is one small thing I can improve this week?*"
         ]
         routine += [
             "Set a consistent sleep/wake time for the next 7 days.",
             "Plan micro-breaks during work/study blocks (5 min every hour)."
         ]
     else:
-        immediate += [
-            "Do one pleasant activity today (music, nature, call a friend)."
-        ]
-        routine += [
-            "Keep noticing patterns: what improves or worsens your mood?",
-        ]
+        immediate += ["Do one pleasant activity today (music, nature, call a friend)."]
+        routine += ["Notice patterns: what improves or worsens your mood?"]
 
-    # Personalized add-ons from inputs
+    # Add personalized factors
     if s.workload == "Yes":
-        routine.append("Negotiate workload or set clearer boundaries for the next sprint/week.")
+        routine.append("Negotiate workload or set clearer boundaries this week.")
     if s.sleep == "Poor" or s.hours < 6:
-        routine.append("Follow basic sleep hygiene: limit screens 1 hr before bed, keep the room dark, consistent bedtime.")
+        routine.append("Improve sleep hygiene: no screens 1 hr before bed, consistent bedtime.")
     if s.worry == "Yes":
-        immediate.append("Try a 4-7-8 breathing cycle (4 in, 7 hold, 8 out) x4 rounds.")
+        immediate.append("Try 4-7-8 breathing: inhale 4, hold 7, exhale 8 (x4).")
     if s.panic == "Yes":
-        immediate.append("Use a grounding technique: name 5 things you can see, 4 you can touch, 3 you can hear, 2 you can smell, 1 you can taste.")
+        immediate.append("Grounding technique: 5 things see, 4 touch, 3 hear, 2 smell, 1 taste.")
     if s.motivation == "Yes":
-        routine.append("Use the 2-minute rule: start with a tiny version of the task to overcome inertia.")
+        routine.append("Use the 2-minute rule: start with a tiny step of the task.")
     if s.interest == "No":
-        routine.append("Schedule one small activity you used to enjoy (15–20 minutes).")
+        routine.append("Schedule a small activity you used to enjoy (15–20 min).")
 
-    # Return sections
     return {
-        "immediate": list(dict.fromkeys(immediate)),  # de-duplicate
+        "immediate": list(dict.fromkeys(immediate)),
         "routine": list(dict.fromkeys(routine)),
         "professional": list(dict.fromkeys(professional))
     }
@@ -250,43 +257,30 @@ progress_bar()
 # STEP 1
 if st.session_state.step == 1:
     st.subheader("Step 1/3 · Sleep")
-    st.radio("How is your sleep quality?",
-             ["Select...", "Good", "Poor"],
-             key="sleep")
+    st.radio("How is your sleep quality?", ["Select...", "Good", "Poor"], key="sleep")
     st.number_input("How many hours do you sleep per night?",
                     min_value=0, max_value=24, value=st.session_state.hours, key="hours")
     c1, c2, c3 = st.columns([1, 1, 2])
-    with c1:
-        st.button("Reset", on_click=reset_assessment)
+    with c1: st.button("Reset", on_click=reset_assessment)
     with c3:
         if st.button("Next →"):
             ok, msg = validate_step(1)
-            if ok:
-                next_step()
-            else:
-                st.warning(f"⚠️ {msg}")
+            if ok: next_step()
+            else: st.warning(f"⚠️ {msg}")
 
 # STEP 2
 elif st.session_state.step == 2:
     st.subheader("Step 2/3 · Mood & Interest")
-    st.radio("How is your mood?",
-             ["Select...", "Good", "Low"],
-             key="mood")
-    st.radio("Do you feel interested in things?",
-             ["Select...", "Yes", "No"],
-             key="interest")
+    st.radio("How is your mood?", ["Select...", "Good", "Low"], key="mood")
+    st.radio("Do you feel interested in things?", ["Select...", "Yes", "No"], key="interest")
     c1, c2, c3 = st.columns([1, 1, 2])
-    with c1:
-        st.button("← Back", on_click=prev_step)
-    with c2:
-        st.button("Reset", on_click=reset_assessment)
+    with c1: st.button("← Back", on_click=prev_step)
+    with c2: st.button("Reset", on_click=reset_assessment)
     with c3:
         if st.button("Next →"):
             ok, msg = validate_step(2)
-            if ok:
-                next_step()
-            else:
-                st.warning(f"⚠️ {msg}")
+            if ok: next_step()
+            else: st.warning(f"⚠️ {msg}")
 
 # STEP 3
 elif st.session_state.step == 3:
@@ -296,19 +290,14 @@ elif st.session_state.step == 3:
     st.radio("Is your workload high?", ["Select...", "Yes", "No"], key="workload")
     st.radio("Are you feeling tired often?", ["Select...", "Yes", "No"], key="tired")
     st.radio("Do you lack motivation?", ["Select...", "Yes", "No"], key="motivation")
-
     c1, c2, c3 = st.columns([1, 1, 2])
-    with c1:
-        st.button("← Back", on_click=prev_step)
-    with c2:
-        st.button("Reset", on_click=reset_assessment)
+    with c1: st.button("← Back", on_click=prev_step)
+    with c2: st.button("Reset", on_click=reset_assessment)
     with c3:
         if st.button("Run Assessment ✅"):
             ok, msg = validate_step(3)
-            if not ok:
-                st.warning(f"⚠️ {msg}")
-            else:
-                st.session_state.result = infer_diagnosis()
+            if ok: st.session_state.result = infer_diagnosis()
+            else: st.warning(f"⚠️ {msg}")
 
 # ---------------- Results & Advice ----------------
 if st.session_state.result:
@@ -317,6 +306,7 @@ if st.session_state.result:
     st.subheader("📝 Assessment Result")
     st.write(f"**Diagnosis:** {res['diagnosis']}")
     st.write(f"**Explanation:** {res['explanation']}")
+    st.write(f"**Conflict Resolution Strategy Used:** {res['strategy_used']}")
     st.info(f"**Base Advice:** {res['advice']}")
 
     # Personalized tiers
@@ -336,10 +326,14 @@ if st.session_state.result:
             st.markdown(f"- {tip}")
 
     # Transparency
-    with st.expander("🗂️ Reasoning Path (History)"):
+    with st.expander("🗂️ Reasoning Path (Audit Trail)"):
         st.write("Past diagnoses in this session:")
         for i, diag in enumerate(st.session_state.history, 1):
             st.write(f"{i}. {diag}")
+        if st.session_state.ranked_rules:
+            st.write("---")
+            st.write("Rules considered (ranked by specificity):")
+            for r in st.session_state.ranked_rules:
+                st.write(f"- {r['diagnosis']} (specificity {r['specificity']})")
 
-    # Start again
     st.button("Start New Assessment", on_click=reset_assessment)
