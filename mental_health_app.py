@@ -174,4 +174,4 @@ if prompt := st.chat_input("Your reply..."):
             st.session_state.slots[slot] = nums[0] if nums else 0
         else:
             st.session_state.slots[slot] = "Yes" if "yes" in response else "No"
-    st.experimental_rerun()
+    st.rerun()
