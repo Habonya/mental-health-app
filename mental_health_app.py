@@ -1,5 +1,5 @@
 import streamlit as st
-from streamlit_chat import message
+#from streamlit_chat import message
 import numpy as np
 import skfuzzy as fuzz
 from skfuzzy import control as ctrl
@@ -344,17 +344,9 @@ def get_bot_response():
 chat_container = st.container()
 
 with chat_container:
-    for i, msg in enumerate(st.session_state.messages):
-        is_user = msg["role"] == "user"
-        message(msg["content"], is_user=is_user, key=str(i))
-
-    if prompt := st.chat_input(""):
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        handle_user_input(prompt)
-        bot_response = get_bot_response()
-        if bot_response:
-            st.session_state.messages.append({"role": "assistant", "content": bot_response})
-        st.experimental_rerun()
+    for msg in st.session_state.messages:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
 
 # ====================== Results & Advice (Unchanged) ======================
 results_container = st.container()
