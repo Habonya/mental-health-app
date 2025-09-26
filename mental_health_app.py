@@ -251,31 +251,96 @@ def get_bot_response():
         s.result = fuzzy_infer_diagnosis(inputs)
         return "Thank you. I have all the information needed. Here is the output of the analysis:"
 
-# ====================== Chat UI & Main Loop ======================
-# Chat History Display
+# ====================== Custom UI Styling ======================
+custom_css = """
+<style>
+    body {
+        background: linear-gradient(135deg, #e0f7fa, #fce4ec);
+    }
+    .stChatMessage {
+        padding: 0.8rem 1rem;
+        border-radius: 1rem;
+        margin: 0.3rem 0;
+        max-width: 80%;
+        line-height: 1.4;
+    }
+    .stChatMessage.user {
+        background: #bbdefb;
+        margin-left: auto;
+        color: black;
+        font-weight: 500;
+    }
+    .stChatMessage.assistant {
+        background: #f1f8e9;
+        margin-right: auto;
+        color: black;
+    }
+    .stCard {
+        background: white;
+        border-radius: 1rem;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        padding: 1.2rem;
+        margin: 1rem 0;
+    }
+    .stResult {
+        font-size: 1.1rem;
+        line-height: 1.6;
+    }
+</style>
+"""
+st.markdown(custom_css, unsafe_allow_html=True)
+
+# ====================== Chat History Display ======================
 chat_container = st.container()
 with chat_container:
     for i, msg in enumerate(st.session_state.messages):
-        # Use an icon for the assistant to improve the 'outlook'
-        avatar = "🧠" if msg["role"] == "assistant" else "👤"
-        message(msg["content"], is_user=(msg["role"] == "user"), key=str(i), avatar_style="initials", seed=avatar)
+        role_class = "user" if msg["role"] == "user" else "assistant"
+        st.markdown(
+            f"<div class='stChatMessage {role_class}'>"
+            f"{'👤 ' if role_class=='user' else '🧠 '} {msg['content']}"
+            "</div>",
+            unsafe_allow_html=True
+        )
 
-# Input Box
+# ====================== Input Box ======================
 if st.session_state.result is None:
-    if prompt := st.chat_input("Enter your response (e.g., '7' or '8 hours')"):
+    if prompt := st.chat_input("💬 Type your response here..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
-        
-        # Process the input and determine the next question/result
         handle_user_input(prompt)
-        
         bot_response = get_bot_response()
-        
         if bot_response:
             st.session_state.messages.append({"role": "assistant", "content": bot_response})
-            st.rerun()
+            st.experimental_rerun()
 else:
-    # Disable input box once results are shown
-    st.chat_input("", disabled=True, placeholder="Assessment complete.")
+    st.chat_input(placeholder="✨ Assessment complete. Start a new one below.", disabled=True)
+
+# ====================== Results Display ======================
+if st.session_state.result:
+    res = st.session_state.result
+    st.markdown("---")
+
+    # Diagnosis in a nice card
+    st.markdown(
+        f"""
+        <div class="stCard">
+            <h3>📝 Cognitive Assessment Outcome: <b>{res['diagnosis']}</b></h3>
+            <p class="stResult">{res['explanation']}</p>
+            <p>🎯 <b>Next Step:</b> {res['advice']}</p>
+        </div>
+        """, unsafe_allow_html=True
+    )
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric("Calculated Fuzzy Risk Score (0-10)", f"{res['crisp_risk_value']:.2f}")
+    with col2:
+        st.metric(f"Confidence in {res['diagnosis']}", f"{res['best_membership']:.2f}")
+
+    st.warning("⚠️ **Disclaimer:** This is an *initial risk screening*. Please seek professional help if symptoms persist or worsen.")
+    
+    st.button("🔄 Start New Assessment", on_click=reset_assessment)
+
+
 
 
 # ====================== Results Display ======================
