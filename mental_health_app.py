@@ -290,17 +290,38 @@ custom_css = """
 """
 st.markdown(custom_css, unsafe_allow_html=True)
 
-# ====================== Chat History Display ======================
+# ====================== Progress Bar ======================
+if "chat_index" in st.session_state:
+    progress = st.session_state.chat_index / len(QUESTIONS)
+    st.progress(progress, text=f"Progress: {st.session_state.chat_index}/{len(QUESTIONS)}")
+
+
+# ====================== Chat History Display (Styled Bubbles) ======================
 chat_container = st.container()
 with chat_container:
     for i, msg in enumerate(st.session_state.messages):
-        role_class = "user" if msg["role"] == "user" else "assistant"
-        st.markdown(
-            f"<div class='stChatMessage {role_class}'>"
-            f"{'👤 ' if role_class=='user' else '🧠 '} {msg['content']}"
-            "</div>",
-            unsafe_allow_html=True
-        )
+        if msg["role"] == "assistant":
+            st.markdown(
+                f"""
+                <div style="background-color:#E6F4EA; color:#1B4332; 
+                            padding:12px; border-radius:15px; margin:6px 0; 
+                            max-width:80%;">
+                    🧠 {msg["content"]}
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                f"""
+                <div style="background-color:#D0E7FF; color:#003566; 
+                            padding:12px; border-radius:15px; margin:6px 0; 
+                            max-width:80%; margin-left:auto;">
+                    👤 {msg["content"]}
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
 # ====================== Input Box ======================
 if st.session_state.result is None:
@@ -347,23 +368,33 @@ if st.session_state.result:
 if st.session_state.result:
     res = st.session_state.result
     st.markdown("---")
-    
-    st.subheader(f"📝 Cognitive Assessment Outcome: **{res['diagnosis']}**")
 
-    # Display the human-like, factual summary
-    st.markdown(f"**Detailed Summary:**")
-    st.markdown(f"*{res['explanation']}*")
+    st.markdown(
+        f"""
+        <div style="background-color:#FFFFFF; border:2px solid #4CAF50; 
+                    border-radius:15px; padding:20px; margin-top:20px;">
+            <h3 style="color:#2E7D32;">📝 Cognitive Assessment Outcome</h3>
+            <p><b>Diagnosis:</b> {res['diagnosis']}</p>
+            <p><b>Explanation:</b> {res['explanation']}</p>
+            <p><b>Next Step:</b> {res['advice']}</p>
+            <h4 style="color:#1B4332;">📚 References</h4>
+            <ul>
+                <li><a href="https://www.nimh.nih.gov" target="_blank">National Institute of Mental Health (NIMH)</a></li>
+                <li><a href="https://www.psychiatry.org" target="_blank">American Psychiatric Association (APA)</a></li>
+                <li><a href="https://www.mayoclinic.org" target="_blank">Mayo Clinic – Mental Health Resources</a></li>
+            </ul>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-    st.info(f"**🎯 Recommended Next Step:** {res['advice']}")
-    
-    st.markdown("---")
-    
     col1, col2 = st.columns(2)
     with col1:
-        st.metric(label="Calculated Fuzzy Risk Score (0-10)", value=f"{res['crisp_risk_value']:.2f}")
+        st.metric("Calculated Fuzzy Risk Score (0-10)", f"{res['crisp_risk_value']:.2f}")
     with col2:
-        st.metric(label=f"Confidence in **{res['diagnosis']}** (Membership Value)", value=f"{res['best_membership']:.2f}")
+        st.metric(f"Confidence in {res['diagnosis']}", f"{res['best_membership']:.2f}")
 
-    st.warning("⚠️ **Important Disclaimer:** This is an *initial risk screening* only. Please prioritize seeking a comprehensive evaluation and care from a licensed mental health professional, especially if your symptoms are severe or persistent.")
+    st.warning("⚠️ **Disclaimer:** This is an *initial risk screening*. Please seek professional help if symptoms persist or worsen.")
     
-    st.button("Start New Assessment", on_click=reset_assessment)
+    if st.button("🔄 Restart Assessment"):
+        reset_assessment()
