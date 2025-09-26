@@ -5,7 +5,7 @@ import skfuzzy as fuzz
 from skfuzzy import control as ctrl
 
 # ====================== UI Setup ======================
-st.set_page_config(page_title="CogniCare AI", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="Expert System", layout="wide", initial_sidebar_state="collapsed")
 
 hide_st_style = """
 <style>
@@ -15,9 +15,9 @@ footer {visibility: hidden;}
 """
 st.markdown(hide_st_style, unsafe_allow_html=True)
 
-st.title("💡 CogniCare AI - Mental Health Advisory System")
+st.title("💡 Group 5's - Mental Health Advisory System")
 st.markdown("##### Your secure, initial mental wellness check.")
-st.write("**:warning: This is an advisory tool only and does not replace the evaluation or care of a licensed mental health professional.**")
+st.write("**:warning: This is an advisory tool only and does not replace the evaluation or care of a licensed mental health professional. If you are experiencing any mental healt challenges please seek the care of a licensed professional**")
 st.markdown("---")
 
 # ====================== Session State ======================
@@ -310,7 +310,7 @@ if st.session_state.result is None:
         bot_response = get_bot_response()
         if bot_response:
             st.session_state.messages.append({"role": "assistant", "content": bot_response})
-            st.experimental_rerun()
+            st.rerun()
 else:
     st.chat_input(placeholder="✨ Assessment complete. Start a new one below.", disabled=True)
 
