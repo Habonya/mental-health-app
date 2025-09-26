@@ -51,7 +51,7 @@ def reset_assessment():
     st.session_state.clear()
     _ensure_defaults()
     st.session_state.update({k: v for k, v in keep.items() if v is not None})
-    st.experimental_rerun()
+    st.rerun()
 
 # ====================== Fuzzy Control System ======================
 # Inputs
@@ -186,7 +186,7 @@ if prompt := st.chat_input(""):
     handle_user_input(prompt)
     if bot_response := get_bot_response():
         st.session_state.messages.append({"role": "assistant", "content": bot_response})
-    st.experimental_rerun()
+    st.rerun()
 
 # ====================== Results ======================
 if st.session_state.result:
