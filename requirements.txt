@@ -1,0 +1,8 @@
+streamlit
+streamlit-chat
+scikit-fuzzy
+scipy
+numpy
+matplotlib
+pandas
+scikit-learn
