@@ -5,7 +5,7 @@ import skfuzzy as fuzz
 from skfuzzy import control as ctrl
 
 # ====================== UI Setup ======================
-st.set_page_config(page_title="Mindful AI", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="CogniCare AI", layout="wide", initial_sidebar_state="collapsed")
 
 hide_st_style = """
 <style>
@@ -15,25 +15,27 @@ footer {visibility: hidden;}
 """
 st.markdown(hide_st_style, unsafe_allow_html=True)
 
-st.title("🧠 Mindful AI")
-st.markdown("##### Your personalized mental health companion.")
-st.write("This is an *advisory tool only*. It does not replace professional care.")
+st.title("💡 CogniCare AI - Mental Health Advisory System")
+st.markdown("##### Your secure, initial mental wellness check.")
+st.write("**:warning: This is an advisory tool only and does not replace the evaluation or care of a licensed mental health professional.**")
+st.markdown("---")
 
 # ====================== Session State ======================
 def _ensure_defaults():
+    # Use 5 (midpoint) as a default, non-committal value for 0-10 scales
     defaults = {
-        "sleep": None,
-        "hours": None,
-        "mood": None,
-        "interest": None,
-        "worry": None,
-        "panic": None,
-        "workload": None,
-        "tired": None,
-        "motivation": None,
+        "sleep_quality": 5,
+        "hours": 7,
+        "mood": 5,
+        "interest": 5,
+        "worry": 5,
+        "panic": 5,
+        "workload": 5,
+        "tiredness": 5,
+        "motivation": 5,
         "last_diagnosis": None,
         "result": None,
-        "messages": [{"role": "assistant", "content": "Hello! I'm here to help with a brief self-assessment. Let's start."}],
+        "messages": [{"role": "assistant", "content": "Welcome! I'm here to guide you through a brief self-assessment. Please answer the following questions on a scale from **1 (Very Low/Poor/Never)** to **10 (Very High/Good/Always)**, or by giving a specific number for hours."}],
         "chat_index": 0,
         "questions_asked": True,
     }
@@ -46,142 +48,257 @@ _ensure_defaults()
 # ====================== Helpers ======================
 def reset_assessment():
     keep = {"last_diagnosis": st.session_state.get("last_diagnosis")}
+    # Clear all keys except essential Streamlit ones
     for key in list(st.session_state.keys()):
-        del st.session_state[key]
+        if not key.startswith('__'):
+            del st.session_state[key]
     _ensure_defaults()
     st.session_state.update({k: v for k, v in keep.items() if v is not None})
     st.rerun()
 
-# ====================== Fuzzy System ======================
+# ====================== Fuzzy System Setup ======================
+
+# Antecedents (Inputs)
+# Hours can be a crisp input (number) so its universe remains standard.
 hours = ctrl.Antecedent(np.arange(0, 13, 1), 'hours')
-sleep = ctrl.Antecedent(np.arange(0, 11, 1), 'sleep')
+# All other subjective inputs are now simply a 0-10 scale
+sleep_quality = ctrl.Antecedent(np.arange(0, 11, 1), 'sleep_quality')
 mood = ctrl.Antecedent(np.arange(0, 11, 1), 'mood')
 interest = ctrl.Antecedent(np.arange(0, 11, 1), 'interest')
 worry = ctrl.Antecedent(np.arange(0, 11, 1), 'worry')
 panic = ctrl.Antecedent(np.arange(0, 11, 1), 'panic')
 workload = ctrl.Antecedent(np.arange(0, 11, 1), 'workload')
-tired = ctrl.Antecedent(np.arange(0, 11, 1), 'tired')
+tiredness = ctrl.Antecedent(np.arange(0, 11, 1), 'tiredness')
 motivation = ctrl.Antecedent(np.arange(0, 11, 1), 'motivation')
 
-diagnosis = ctrl.Consequent(np.arange(0, 11, 1), 'diagnosis')
+# Consequent (Output)
+diagnosis_risk = ctrl.Consequent(np.arange(0, 11, 1), 'diagnosis_risk')
 
-# Membership functions
+# --- Membership Functions (Adjusted for better distribution) ---
+
+# Hours slept
 hours['short'] = fuzz.trapmf(hours.universe, [0, 0, 4, 6])
-hours['normal'] = fuzz.trapmf(hours.universe, [5, 7, 9, 11])
-hours['long'] = fuzz.trapmf(hours.universe, [10, 12, 12, 12])
+hours['normal'] = fuzz.trimf(hours.universe, [6, 8, 10])
+hours['long'] = fuzz.trapmf(hours.universe, [9, 11, 12, 12])
 
-for var in [sleep, mood, interest, worry, panic, workload, tired, motivation]:
-    var['low'] = fuzz.trimf(var.universe, [0, 0, 5])
-    var['high'] = fuzz.trimf(var.universe, [5, 10, 10])
+# General 0-10 scale (Low, Moderate, High)
+for var in [sleep_quality, mood, interest, worry, panic, workload, tiredness, motivation]:
+    var['low'] = fuzz.trimf(var.universe, [0, 0, 4])
+    var['moderate'] = fuzz.trimf(var.universe, [2, 5, 8])
+    var['high'] = fuzz.trimf(var.universe, [6, 10, 10])
 
-diagnosis['mild_distress'] = fuzz.trimf(diagnosis.universe, [0, 0, 3])
-diagnosis['fatigue'] = fuzz.trimf(diagnosis.universe, [2, 4, 6])
-diagnosis['stress_overload'] = fuzz.trimf(diagnosis.universe, [4, 6, 8])
-diagnosis['depression'] = fuzz.trimf(diagnosis.universe, [6, 8, 10])
-diagnosis['anxiety'] = fuzz.trimf(diagnosis.universe, [6, 8, 10])
-diagnosis['burnout'] = fuzz.trimf(diagnosis.universe, [6, 8, 10])
-diagnosis['sleep_deprivation'] = fuzz.trimf(diagnosis.universe, [4, 6, 8])
-diagnosis['unclear'] = fuzz.trimf(diagnosis.universe, [0, 2, 4])
+# Diagnosis Risk (More specific, overlapping categories)
+diagnosis_risk['minimal_concern'] = fuzz.trimf(diagnosis_risk.universe, [0, 0, 3])
+diagnosis_risk['elevated_fatigue'] = fuzz.trimf(diagnosis_risk.universe, [2, 4, 6])
+diagnosis_risk['stress_distress'] = fuzz.trimf(diagnosis_risk.universe, [4, 6, 8])
+diagnosis_risk['anxiety_risk'] = fuzz.trimf(diagnosis_risk.universe, [6, 8, 10])
+diagnosis_risk['depressive_risk'] = fuzz.trimf(diagnosis_risk.universe, [6, 8, 10])
+diagnosis_risk['burnout_risk'] = fuzz.trimf(diagnosis_risk.universe, [7, 9, 10])
 
-# Rules
-rule1 = ctrl.Rule(worry['high'] & panic['high'], diagnosis['anxiety'])
-rule2 = ctrl.Rule(sleep['low'] & mood['low'] & interest['low'], diagnosis['depression'])
-rule3 = ctrl.Rule(workload['high'] & tired['high'] & motivation['low'], diagnosis['burnout'])
-rule4 = ctrl.Rule(sleep['low'] & tired['high'] & hours['short'], diagnosis['sleep_deprivation'])
-rule5 = ctrl.Rule(worry['high'] & mood['low'] & tired['high'], diagnosis['stress_overload'])
-rule6 = ctrl.Rule(mood['low'] & motivation['low'] & interest['low'], diagnosis['depression'])
-rule7 = ctrl.Rule(tired['high'] & motivation['high'] & sleep['high'], diagnosis['fatigue'])
-rule8 = ctrl.Rule(worry['high'] | tired['high'] | mood['low'] | motivation['low'], diagnosis['mild_distress'])
+# --- Rules (Adjusted to use the three-level membership functions) ---
+rule1 = ctrl.Rule(worry['high'] | panic['high'], diagnosis_risk['anxiety_risk'])
+rule2 = ctrl.Rule(mood['low'] & interest['low'] & tiredness['moderate'], diagnosis_risk['depressive_risk'])
+rule3 = ctrl.Rule(workload['high'] & tiredness['high'] & motivation['low'], diagnosis_risk['burnout_risk'])
+rule4 = ctrl.Rule(sleep_quality['low'] & hours['short'] & tiredness['high'], diagnosis_risk['elevated_fatigue'])
+rule5 = ctrl.Rule(worry['moderate'] & mood['moderate'] & workload['high'], diagnosis_risk['stress_distress'])
+rule6 = ctrl.Rule(mood['low'] & interest['low'], diagnosis_risk['depressive_risk'])
+rule7 = ctrl.Rule(tiredness['high'] & sleep_quality['moderate'] & workload['low'], diagnosis_risk['elevated_fatigue'])
+rule8 = ctrl.Rule(mood['moderate'] | interest['moderate'] | motivation['moderate'], diagnosis_risk['minimal_concern'])
 
+# Combine rules into a Control System
 diagnosis_ctrl = ctrl.ControlSystem([rule1, rule2, rule3, rule4, rule5, rule6, rule7, rule8])
 diagnosis_sim = ctrl.ControlSystemSimulation(diagnosis_ctrl)
 
-# ====================== Input Mapping ======================
-def map_to_scale(user_input, var):
-    if not user_input:
-        return 5
-    text = user_input.lower()
-    if var == "hours":
-        digits = ''.join(c for c in text if c.isdigit())
-        return int(digits) if digits else 6
-    if any(word in text for word in ["good", "well", "okay", "fine", "great"]):
-        return 8
-    if any(word in text for word in ["bad", "poor", "low", "terrible", "awful"]):
-        return 2
-    if any(word in text for word in ["yes", "often", "always"]):
-        return 8
-    if any(word in text for word in ["no", "never", "rarely"]):
-        return 2
-    return 5
+# ====================== Fuzzy Inference & Human-like Diagnosis ======================
 
-# ====================== Fuzzy Inference ======================
 def fuzzy_infer_diagnosis(inputs):
+    """Performs fuzzy inference and generates a human-like, factual diagnosis."""
+    
+    # 1. CRISP INPUTS - The inputs are now expected to be crisp numbers (0-10 scale)
     try:
-        diagnosis_sim.input['hours'] = map_to_scale(inputs.get('hours'), 'hours')
-        diagnosis_sim.input['sleep'] = map_to_scale(inputs.get('sleep'), 'sleep')
-        diagnosis_sim.input['mood'] = map_to_scale(inputs.get('mood'), 'mood')
-        diagnosis_sim.input['interest'] = map_to_scale(inputs.get('interest'), 'interest')
-        diagnosis_sim.input['worry'] = map_to_scale(inputs.get('worry'), 'worry')
-        diagnosis_sim.input['panic'] = map_to_scale(inputs.get('panic'), 'panic')
-        diagnosis_sim.input['workload'] = map_to_scale(inputs.get('workload'), 'workload')
-        diagnosis_sim.input['tired'] = map_to_scale(inputs.get('tired'), 'tired')
-        diagnosis_sim.input['motivation'] = map_to_scale(inputs.get('motivation'), 'motivation')
+        diagnosis_sim.input['hours'] = inputs.get('hours')
+        diagnosis_sim.input['sleep_quality'] = inputs.get('sleep_quality')
+        diagnosis_sim.input['mood'] = inputs.get('mood')
+        diagnosis_sim.input['interest'] = inputs.get('interest')
+        diagnosis_sim.input['worry'] = inputs.get('worry')
+        diagnosis_sim.input['panic'] = inputs.get('panic')
+        diagnosis_sim.input['workload'] = inputs.get('workload')
+        diagnosis_sim.input['tiredness'] = inputs.get('tiredness')
+        diagnosis_sim.input['motivation'] = inputs.get('motivation')
     except KeyError:
-        return {"diagnosis": "Unclear", "explanation": "Not enough answers.", "advice": "Please complete the full assessment."}
+        return {"diagnosis": "Assessment Incomplete", "explanation": "It looks like some questions were skipped. Please complete the full assessment for a meaningful result.", "advice": "Please complete the full assessment."}
 
-    diagnosis_sim.compute()
-    best = max(diagnosis_sim.output, key=lambda k: diagnosis_sim.output[k])
-    return {"diagnosis": best.capitalize(), "explanation": f"Based on fuzzy analysis, '{best}' is most likely.", "advice": "Track symptoms and consider professional support."}
+    # 2. FUZZY COMPUTATION
+    try:
+        diagnosis_sim.compute()
+        
+        # Get the defuzzified crisp output value (0-10)
+        final_risk_value = diagnosis_sim.output['diagnosis_risk']
+        
+        # Get the fuzzy membership for each diagnosis category
+        memberships = {
+            name: fuzz.interp_membership(diagnosis_risk.universe, diagnosis_risk[name].mf, final_risk_value)
+            for name in diagnosis_risk.terms
+        }
+        
+        # Find the category with the highest membership
+        best_match = max(memberships, key=memberships.get)
+        best_membership = memberships[best_match]
 
-# ====================== Chatbot ======================
+    except Exception as e:
+        # Handle cases where compute fails (e.g., control system is not fully defined)
+        st.error(f"Fuzzy inference failed: {e}")
+        return {"diagnosis": "Error", "explanation": "An internal error occurred during analysis.", "advice": "Try restarting the assessment."}
+
+    # 3. HUMAN-LIKE DIAGNOSIS GENERATION
+    
+    # Map the fuzzy output to a human-readable primary diagnosis
+    primary_diagnosis = best_match.replace('_', ' ').title().replace('Risk', 'Tendency').replace('Distress', 'Distress/Overload').replace('Elevated', 'Significant')
+    
+    # Generate a descriptive summary based on the primary diagnosis
+    if best_match == 'minimal_concern':
+        summary = "The assessment suggests your current responses fall within a **range of minimal concern** for common mental health challenges. You appear to be managing your well-being effectively."
+        advice = "Continue to practice good self-care, monitor your mood and energy, and don't hesitate to reach out if things change."
+    elif best_match == 'elevated_fatigue':
+        summary = f"Based on the analysis, there is a **significant indication of elevated fatigue/low energy** (Membership: ${best_membership:.2f}$). This is often tied to your reported sleep quality and general tiredness."
+        advice = "Focus on **sleep hygiene** (consistent schedule, dark room) and energy management. If persistent, this could be a sign of an underlying physical or mental health issue that warrants a check-up."
+    elif best_match == 'stress_distress':
+        summary = f"The results suggest a **high level of stress or general distress** (Membership: ${best_membership:.2f}$). This is particularly related to the reported level of worry and workload, leading to a state of emotional and mental strain."
+        advice = "Prioritize **stress reduction techniques** like mindfulness, setting firmer boundaries around work, and scheduling dedicated time for relaxation. If your distress is interfering with daily life, consider professional guidance."
+    elif best_match == 'anxiety_risk':
+        summary = f"There is a **noticeable tendency toward anxiety** (Membership: ${best_membership:.2f}$), strongly linked to your self-reported levels of worry and, possibly, panic. This suggests your system may be in a state of hyper-arousal."
+        advice = "Engage in controlled **breathing exercises** and grounding techniques. If panic attacks are a concern, immediate professional consultation with a therapist specializing in anxiety is highly recommended."
+    elif best_match == 'depressive_risk':
+        summary = f"The assessment indicates a **potential depressive tendency** (Membership: ${best_membership:.2f}$), given the co-occurrence of low mood, reduced interest, and low motivation."
+        advice = "It is crucial to **break the isolation cycle** by engaging in light activities, even when you don't feel like it. Seek an evaluation from a mental health expert if these symptoms persist for more than two weeks."
+    elif best_match == 'burnout_risk':
+        summary = f"The pattern of high workload, high tiredness, and critically low motivation points to a **strong risk of occupational burnout** (Membership: ${best_membership:.2f}$). This is a state of chronic workplace stress."
+        advice = "Immediate attention to **work-life balance** is necessary. This may involve taking time off, delegating tasks, or seeking support to manage professional demands. Burnout requires dedicated recovery and often professional coaching."
+    else:
+        summary = "The fuzzy logic system processed your inputs, but the resulting pattern is **unclear or highly mixed**. This means no single risk factor strongly dominates the others, or your symptoms are too mild across the board to generate a definitive primary diagnosis."
+        advice = "Continue to monitor your symptoms. A mixed pattern may indicate mild, generalized stress. If your symptoms worsen, retake the assessment or seek professional advice."
+
+    # Factual Enhancement: Include the most dominant symptoms as context
+    top_symptoms = [k.capitalize() for k, v in inputs.items() if (k != 'hours' and v >= 8) or (k in ['mood', 'interest', 'motivation', 'sleep_quality'] and v <= 3)]
+    
+    if top_symptoms:
+        summary += f" The analysis was particularly influenced by your self-reported data on **{', '.join(top_symptoms)}**."
+
+    return {
+        "diagnosis": primary_diagnosis,
+        "explanation": summary,
+        "advice": advice,
+        "crisp_risk_value": final_risk_value,
+        "best_membership": best_membership
+    }
+
+# ====================== Chatbot & Input Handling (Crucially simplified) ======================
 QUESTIONS = [
-    ("sleep", "How is your sleep quality?"),
-    ("hours", "How many hours do you usually sleep?"),
-    ("mood", "How is your overall mood?"),
-    ("interest", "Do you feel interested in daily activities?"),
-    ("worry", "Are you experiencing persistent worry?"),
-    ("panic", "Have you had panic attacks?"),
-    ("workload", "Is your workload high?"),
-    ("tired", "Do you often feel tired?"),
-    ("motivation", "Do you lack motivation?")
+    ("sleep_quality", "How would you rate your **sleep quality**? (1-10)"),
+    ("hours", "How many **hours** did you sleep last night, on average? (Number)"),
+    ("mood", "How is your overall **mood**? (1-10)"),
+    ("interest", "How interested do you feel in **daily activities**? (1-10)"),
+    ("worry", "How frequently are you experiencing **persistent worry**? (1-10)"),
+    ("panic", "How often have you had **panic/high anxiety** feelings recently? (1-10)"),
+    ("workload", "How **high** is your current **workload/responsibilities**? (1-10)"),
+    ("tiredness", "How often do you feel **tired/low-energy** during the day? (1-10)"),
+    ("motivation", "How is your **motivation** to start or finish tasks? (1-10)")
 ]
 
 def handle_user_input(user_input):
     s = st.session_state
+    
+    if s.chat_index == 0:
+        # First message is just a greeting, start with the first question on the next turn
+        s.chat_index += 1
+        return 
+        
     key = QUESTIONS[s.chat_index - 1][0]
-    s[key] = user_input
-
+    
+    # Try to extract a number from the user's response
+    try:
+        if key == "hours":
+            # Extract digits for 'hours'
+            digits = ''.join(c for c in user_input if c.isdigit())
+            value = int(digits) if digits else 7
+            # Clamp hours to a reasonable range
+            s[key] = max(0, min(12, value)) 
+        else:
+            # Extract a number for 1-10 scales
+            value = int(user_input.strip())
+            # Clamp scale to 1-10
+            s[key] = max(1, min(10, value))
+            
+    except ValueError:
+        # If input is not a clear number, use the midpoint (5) for 1-10 scales, or 7 for hours
+        midpoint = 7 if key == "hours" else 5
+        s[key] = midpoint
+        st.session_state.messages.append({"role": "assistant", "content": f"I didn't catch a clear number for **{key.replace('_', ' ').title()}**. I've recorded a neutral score of **{midpoint}** to continue the assessment."})
+        
 def get_bot_response():
     s = st.session_state
     if s.result:
         return ""
+        
     if s.chat_index < len(QUESTIONS):
+        # Ask the next question
         q = QUESTIONS[s.chat_index][1]
         s.chat_index += 1
         return q
     else:
-        s.result = fuzzy_infer_diagnosis(s)
-        return "Thank you for completing the assessment. Here are your results."
+        # All questions asked, compute result
+        inputs = {key: s.get(key) for key, _ in QUESTIONS}
+        s.result = fuzzy_infer_diagnosis(inputs)
+        return "Thank you. I have all the information needed. Here is the output of the analysis:"
 
-# ====================== Chat UI ======================
-for i, msg in enumerate(st.session_state.messages):
-    message(msg["content"], is_user=(msg["role"] == "user"), key=str(i))
+# ====================== Chat UI & Main Loop ======================
+# Chat History Display
+chat_container = st.container()
+with chat_container:
+    for i, msg in enumerate(st.session_state.messages):
+        # Use an icon for the assistant to improve the 'outlook'
+        avatar = "🧠" if msg["role"] == "assistant" else "👤"
+        message(msg["content"], is_user=(msg["role"] == "user"), key=str(i), avatar_style="initials", seed=avatar)
 
-if prompt := st.chat_input(""):
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    handle_user_input(prompt)
-    bot_response = get_bot_response()
-    if bot_response:
-        st.session_state.messages.append({"role": "assistant", "content": bot_response})
-    st.rerun()
+# Input Box
+if st.session_state.result is None:
+    if prompt := st.chat_input("Enter your response (e.g., '7' or '8 hours')"):
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        
+        # Process the input and determine the next question/result
+        handle_user_input(prompt)
+        
+        bot_response = get_bot_response()
+        
+        if bot_response:
+            st.session_state.messages.append({"role": "assistant", "content": bot_response})
+            st.rerun()
+else:
+    # Disable input box once results are shown
+    st.chat_input("", disabled=True, placeholder="Assessment complete.")
 
-# ====================== Results ======================
+
+# ====================== Results Display ======================
 if st.session_state.result:
     res = st.session_state.result
     st.markdown("---")
-    st.subheader("📝 Assessment Result")
-    st.write(f"*Diagnosis:* {res['diagnosis']}")
-    st.write(f"*Explanation:* {res['explanation']}")
-    st.info(f"*Advice:* {res['advice']}")
-    st.warning("⚠ This tool provides guidance only. Please seek evaluation and care from a licensed professional.")
+    
+    st.subheader(f"📝 Cognitive Assessment Outcome: **{res['diagnosis']}**")
+
+    # Display the human-like, factual summary
+    st.markdown(f"**Detailed Summary:**")
+    st.markdown(f"*{res['explanation']}*")
+
+    st.info(f"**🎯 Recommended Next Step:** {res['advice']}")
+    
+    st.markdown("---")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric(label="Calculated Fuzzy Risk Score (0-10)", value=f"{res['crisp_risk_value']:.2f}")
+    with col2:
+        st.metric(label=f"Confidence in **{res['diagnosis']}** (Membership Value)", value=f"{res['best_membership']:.2f}")
+
+    st.warning("⚠️ **Important Disclaimer:** This is an *initial risk screening* only. Please prioritize seeking a comprehensive evaluation and care from a licensed mental health professional, especially if your symptoms are severe or persistent.")
+    
     st.button("Start New Assessment", on_click=reset_assessment)
