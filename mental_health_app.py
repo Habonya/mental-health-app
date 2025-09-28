@@ -200,16 +200,53 @@ def fuzzy_infer_diagnosis(inputs):
 
 # ====================== Chatbot & Input Handling (Crucially simplified) ======================
 QUESTIONS = [
-    ("sleep_quality", "How would you rate your **sleep quality**? (1-10)"),
-    ("hours", "How many **hours** did you sleep last night, on average? (Number)"),
-    ("mood", "How is your overall **mood**? (1-10)"),
-    ("interest", "How interested do you feel in **daily activities**? (1-10)"),
-    ("worry", "How frequently are you experiencing **persistent worry**? (1-10)"),
-    ("panic", "How often have you had **panic/high anxiety** feelings recently? (1-10)"),
-    ("workload", "How **high** is your current **workload/responsibilities**? (1-10)"),
-    ("tiredness", "How often do you feel **tired/low-energy** during the day? (1-10)"),
-    ("motivation", "How is your **motivation** to start or finish tasks? (1-10)")
+    (
+        "sleep_quality",
+        "Thinking about your sleep recently, how restful or refreshing does it feel on most nights? "
+        "Please rate from 1 (very poor) to 10 (excellent)."
+    ),
+    (
+        "hours",
+        "Can you describe your typical night’s rest lately? Roughly how many hours of sleep do you usually get? "
+        "It's okay to estimate."
+    ),
+    (
+        "mood",
+        "Over the past few days, how have you been feeling emotionally? "
+        "1 means very low, sad, or stressed, and 10 means very positive and calm."
+    ),
+    (
+        "interest",
+        "How engaged or interested have you felt in your usual daily activities lately? "
+        "1 indicates very low interest, 10 indicates very high."
+    ),
+    (
+        "worry",
+        "Have you noticed moments of recurring worry or anxious thoughts? "
+        "Please rate from 1 (never) to 10 (almost always)."
+    ),
+    (
+        "panic",
+        "Have there been times of sudden anxiety or tension that felt overwhelming? "
+        "If so, how often? Rate from 1 (never) to 10 (very frequently)."
+    ),
+    (
+        "workload",
+        "Thinking about your responsibilities at work, school, or home, how demanding or heavy does your current workload feel? "
+        "Rate from 1 (very light) to 10 (extremely heavy)."
+    ),
+    (
+        "tiredness",
+        "During your daily routine, how often do you notice feeling drained or low in energy? "
+        "1 means rarely, 10 means almost all the time."
+    ),
+    (
+        "motivation",
+        "How would you describe your drive or motivation when approaching usual tasks? "
+        "1 means very low, 10 means very high."
+    )
 ]
+
 
 def handle_user_input(user_input):
     s = st.session_state
@@ -360,8 +397,29 @@ if st.session_state.result:
         inputs['motivation']
     ]
     X_input = [features]
-    y_pred = rf_model.predict(X_input)
-    ml_prediction = label_encoder.inverse_transform(y_pred)[0]  
+# ================== Robust ML Prediction ==================
+ml_label_map = {
+    'minimal_concern': 'Minimal Concern',
+    'elevated_fatigue': 'Elevated Fatigue',
+    'stress_distress': 'Stress/Distress',
+    'anxiety_risk': 'Anxiety Tendency',
+    'depressive_risk': 'Depressive Tendency',
+    'burnout_risk': 'Burnout Risk'
+}
+
+# Define a priority list for “closest match” in case of unexpected label
+fallback_order = ['minimal_concern', 'elevated_fatigue', 'stress_distress', 
+                  'anxiety_risk', 'depressive_risk', 'burnout_risk']
+
+y_pred = rf_model.predict(X_input)
+y_pred_str = str(y_pred[0])
+
+# Map prediction safely; if unknown, pick the closest in fallback_order
+ml_prediction = ml_label_map.get(
+    y_pred_str,
+    ml_label_map[fallback_order[min(range(len(fallback_order)), key=lambda i: abs(i - 0))]]
+)
+
 
     st.markdown(
         f"""
