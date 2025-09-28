@@ -290,8 +290,7 @@ top_symptoms = [
 
 if top_symptoms:
     summary += f" The assessment was particularly influenced by your high or low responses in: **{', '.join(top_symptoms)}**."
-
-    return {
+return {
     "diagnosis": primary_diagnosis,
     "explanation": summary,
     "advice": advice,
