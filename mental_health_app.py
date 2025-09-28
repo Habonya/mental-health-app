@@ -118,7 +118,7 @@ diagnosis_sim = ctrl.ControlSystemSimulation(diagnosis_ctrl)
 # ====================== Fuzzy Inference & Human-like Diagnosis ======================
 """
 def fuzzy_infer_diagnosis(inputs):
-    """Performs fuzzy inference and generates a human-like, factual diagnosis."""
+    Performs fuzzy inference and generates a human-like, factual diagnosis
     
     # 1. CRISP INPUTS - The inputs are now expected to be crisp numbers (0-10 scale)
     try:
@@ -200,9 +200,7 @@ def fuzzy_infer_diagnosis(inputs):
     }
 
 """
-import streamlit as st
-# NOTE: The surrounding imports and control system setup (diagnosis_sim, diagnosis_risk) 
-# from the main script are assumed to be correctly defined for this function to work.
+
 
 def fuzzy_infer_diagnosis(inputs):
     """
