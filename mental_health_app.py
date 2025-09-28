@@ -3,6 +3,12 @@ from streamlit_chat import message
 import numpy as np
 import skfuzzy as fuzz
 from skfuzzy import control as ctrl
+import joblib
+
+# Load ML model and encoder
+rf_model = joblib.load("mental_health_rf.pkl")
+label_encoder = joblib.load("label_encoder.pkl")
+
 
 # ====================== UI Setup ======================
 st.set_page_config(page_title="Expert System", layout="wide", initial_sidebar_state="collapsed")
@@ -339,6 +345,36 @@ else:
 if st.session_state.result:
     res = st.session_state.result
     st.markdown("---")
+    
+    # ================== ML Prediction ==================
+    inputs = {key: st.session_state.get(key) for key, _ in QUESTIONS}
+    features = [
+        inputs['sleep_quality'],
+        inputs['hours'],
+        inputs['mood'],
+        inputs['interest'],
+        inputs['worry'],
+        inputs['panic'],
+        inputs['workload'],
+        inputs['tiredness'],
+        inputs['motivation']
+    ]
+    X_input = [features]
+    y_pred = rf_model.predict(X_input)
+    ml_prediction = label_encoder.inverse_transform(y_pred)[0]  
+
+    st.markdown(
+        f"""
+        <div style="background-color:#F0F4C3; border:2px solid #8BC34A; 
+                    border-radius:15px; padding:20px; margin-top:20px;">
+            <h3 style="color:#33691E;">🤖 Machine Learning Model Prediction</h3>
+            <p><b>Prediction:</b> {ml_prediction}</p>
+            <p>This is based on statistical training with your input values.</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    
 
     # Diagnosis in a nice card
     st.markdown(
@@ -363,38 +399,3 @@ if st.session_state.result:
 
 
 
-
-# ====================== Results Display ======================
-if st.session_state.result:
-    res = st.session_state.result
-    st.markdown("---")
-
-    st.markdown(
-        f"""
-        <div style="background-color:#FFFFFF; border:2px solid #4CAF50; 
-                    border-radius:15px; padding:20px; margin-top:20px;">
-            <h3 style="color:#2E7D32;">📝 Cognitive Assessment Outcome</h3>
-            <p><b>Diagnosis:</b> {res['diagnosis']}</p>
-            <p><b>Explanation:</b> {res['explanation']}</p>
-            <p><b>Next Step:</b> {res['advice']}</p>
-            <h4 style="color:#1B4332;">📚 References</h4>
-            <ul>
-                <li><a href="https://www.nimh.nih.gov" target="_blank">National Institute of Mental Health (NIMH)</a></li>
-                <li><a href="https://www.psychiatry.org" target="_blank">American Psychiatric Association (APA)</a></li>
-                <li><a href="https://www.mayoclinic.org" target="_blank">Mayo Clinic – Mental Health Resources</a></li>
-            </ul>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    col1, col2 = st.columns(2)
-    with col1:
-        st.metric("Calculated Fuzzy Risk Score (0-10)", f"{res['crisp_risk_value']:.2f}")
-    with col2:
-        st.metric(f"Confidence in {res['diagnosis']}", f"{res['best_membership']:.2f}")
-
-    st.warning("⚠️ **Disclaimer:** This is an *initial risk screening*. Please seek professional help if symptoms persist or worsen.")
-    
-    if st.button("🔄 Restart Assessment"):
-        reset_assessment()
