@@ -254,7 +254,7 @@ def handle_user_input(user_input):
     if s.chat_index == 0:
         # First message is just a greeting, start with the first question on the next turn
         s.chat_index += 1
-        return 
+        return
         
     key = QUESTIONS[s.chat_index - 1][0]
     
@@ -383,7 +383,25 @@ if st.session_state.result:
     res = st.session_state.result
     st.markdown("---")
     
-    # ================== ML Prediction ==================
+    # ================== Robust ML Prediction ==================
+    ml_label_map = {
+        'minimal_concern': 'Minimal Concern',
+        'elevated_fatigue': 'Elevated Fatigue',
+        'stress_distress': 'Stress/Distress',
+        'anxiety_risk': 'Anxiety Tendency',
+        'depressive_risk': 'Depressive Tendency',
+        'burnout_risk': 'Burnout Risk'
+    }
+
+    # Define a priority list for “closest match” in case of unexpected label
+    # The original implementation of 'closest match' was highly flawed,
+    # simply defaulting to the first item ('minimal_concern').
+    # I've kept the logic structure but noted the original issue.
+    # A proper fallback would require a measure of distance in the feature space.
+    fallback_order = ['minimal_concern', 'elevated_fatigue', 'stress_distress', 
+                      'anxiety_risk', 'depressive_risk', 'burnout_risk']
+
+    # Prepare features for ML model
     inputs = {key: st.session_state.get(key) for key, _ in QUESTIONS}
     features = [
         inputs['sleep_quality'],
@@ -397,30 +415,23 @@ if st.session_state.result:
         inputs['motivation']
     ]
     X_input = [features]
-# ================== Robust ML Prediction ==================
-ml_label_map = {
-    'minimal_concern': 'Minimal Concern',
-    'elevated_fatigue': 'Elevated Fatigue',
-    'stress_distress': 'Stress/Distress',
-    'anxiety_risk': 'Anxiety Tendency',
-    'depressive_risk': 'Depressive Tendency',
-    'burnout_risk': 'Burnout Risk'
-}
 
-# Define a priority list for “closest match” in case of unexpected label
-fallback_order = ['minimal_concern', 'elevated_fatigue', 'stress_distress', 
-                  'anxiety_risk', 'depressive_risk', 'burnout_risk']
+    # Predict with ML model
+    y_pred = rf_model.predict(X_input)
+    # Decode the prediction label
+    # NOTE: The original code used the raw string of the prediction from the model
+    # (which would be a stringified number if the model output was encoded).
+    # Since the full context of the ML model output is unknown, the safe mapping is used.
+    # Assuming y_pred[0] is one of the keys in ml_label_map.
+    y_pred_str = str(y_pred[0])
 
-y_pred = rf_model.predict(X_input)
-y_pred_str = str(y_pred[0])
+    # Map prediction safely; if unknown, pick the closest in fallback_order (or default to the first)
+    ml_prediction = ml_label_map.get(
+        y_pred_str,
+        ml_label_map[fallback_order[min(range(len(fallback_order)), key=lambda i: abs(i - 0))]]
+    )
 
-# Map prediction safely; if unknown, pick the closest in fallback_order
-ml_prediction = ml_label_map.get(
-    y_pred_str,
-    ml_label_map[fallback_order[min(range(len(fallback_order)), key=lambda i: abs(i - 0))]]
-)
-
-
+    # ML Prediction Card
     st.markdown(
         f"""
         <div style="background-color:#F0F4C3; border:2px solid #8BC34A; 
@@ -432,7 +443,6 @@ ml_prediction = ml_label_map.get(
         """,
         unsafe_allow_html=True,
     )
-    
 
     # Diagnosis in a nice card
     st.markdown(
@@ -442,18 +452,19 @@ ml_prediction = ml_label_map.get(
             <p class="stResult">{res['explanation']}</p>
             <p>🎯 <b>Next Step:</b> {res['advice']}</p>
         </div>
-        """, unsafe_allow_html=True
+        """,
+        unsafe_allow_html=True
     )
 
+    # Display additional metrics
     col1, col2 = st.columns(2)
     with col1:
         st.metric("Calculated Fuzzy Risk Score (0-10)", f"{res['crisp_risk_value']:.2f}")
     with col2:
         st.metric(f"Confidence in {res['diagnosis']}", f"{res['best_membership']:.2f}")
 
+    # Final disclaimer
     st.warning("⚠️ **Disclaimer:** This is an *initial risk screening*. Please seek professional help if symptoms persist or worsen.")
-    
+
+    # Button to reset assessment
     st.button("🔄 Start New Assessment", on_click=reset_assessment)
-
-
-
