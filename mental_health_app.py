@@ -6,7 +6,7 @@ from skfuzzy import control as ctrl
 import joblib
 
 # Load ML model and encoder
-rf_model = joblib.load("mental_health_rf.pkl")
+rf_model = joblib.load("mental_health_model.pkl")
 label_encoder = joblib.load("label_encoder.pkl")
 
 
