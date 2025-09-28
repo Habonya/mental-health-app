@@ -116,7 +116,7 @@ diagnosis_ctrl = ctrl.ControlSystem([rule1, rule2, rule3, rule4, rule5, rule6, r
 diagnosis_sim = ctrl.ControlSystemSimulation(diagnosis_ctrl)
 
 # ====================== Fuzzy Inference & Human-like Diagnosis ======================
-
+"""
 def fuzzy_infer_diagnosis(inputs):
     """Performs fuzzy inference and generates a human-like, factual diagnosis."""
     
@@ -197,6 +197,203 @@ def fuzzy_infer_diagnosis(inputs):
         "advice": advice,
         "crisp_risk_value": final_risk_value,
         "best_membership": best_membership
+    }
+
+"""
+import streamlit as st
+# NOTE: The surrounding imports and control system setup (diagnosis_sim, diagnosis_risk) 
+# from the main script are assumed to be correctly defined for this function to work.
+
+def fuzzy_infer_diagnosis(inputs):
+    """
+    Performs fuzzy inference, generates a defuzzified risk score, 
+    and provides a professional, human-like diagnosis based on the risk category,
+    including an explanation of contributing factors and the fuzzy risk score.
+    """
+    
+    # Identify key high/low inputs (1-3 for low, 8-10 for high)
+    symptom_data = {}
+    for k, v in inputs.items():
+        if k not in ['hours']:
+            if v >= 8:
+                symptom_data[k] = f"**High** ({v}/10)"
+            elif v <= 3:
+                symptom_data[k] = f"**Low** ({v}/10)"
+
+    # Identify low and high domains for the clinical correlates
+    high_symptoms = [v for k, v in symptom_data.items() if 'High' in v]
+    low_symptoms = [v for k, v in symptom_data.items() if 'Low' in v and k not in ['workload', 'tiredness', 'worry', 'panic']]
+    
+    # 1. CRISP INPUTS - The inputs are expected to be crisp numbers (0-10 scale)
+    try:
+        # Assuming diagnosis_sim is globally available and set up
+        diagnosis_sim.input['hours'] = inputs.get('hours')
+        diagnosis_sim.input['sleep_quality'] = inputs.get('sleep_quality')
+        diagnosis_sim.input['mood'] = inputs.get('mood')
+        diagnosis_sim.input['interest'] = inputs.get('interest')
+        diagnosis_sim.input['worry'] = inputs.get('worry')
+        diagnosis_sim.input['panic'] = inputs.get('panic')
+        diagnosis_sim.input['workload'] = inputs.get('workload')
+        diagnosis_sim.input['tiredness'] = inputs.get('tiredness')
+        diagnosis_sim.input['motivation'] = inputs.get('motivation')
+    except KeyError:
+        return {
+            "diagnosis": "Assessment Incomplete", 
+            "explanation": "The analysis could not be completed because one or more input values were missing. Please ensure all questions are answered.", 
+            "advice": "Please complete the full assessment.",
+            "crisp_risk_value": 0.0,
+            "best_membership": 0.0
+        }
+
+    # 2. FUZZY COMPUTATION
+    try:
+        diagnosis_sim.compute()
+        
+        # Get the defuzzified crisp output value (0-10)
+        final_risk_value = diagnosis_sim.output['diagnosis_risk']
+        
+        # Get the fuzzy membership for each diagnosis category
+        # NOTE: diagnosis_risk is assumed to be globally available
+        memberships = {
+            name: fuzz.interp_membership(diagnosis_risk.universe, diagnosis_risk[name].mf, final_risk_value)
+            for name in diagnosis_risk.terms
+        }
+        
+        # Find the category with the highest membership
+        best_match = max(memberships, key=memberships.get)
+        best_membership = memberships[best_match]
+
+    except Exception as e:
+        # Handle cases where compute fails 
+        st.error(f"Fuzzy inference failed: {e}")
+        return {
+            "diagnosis": "System Error", 
+            "explanation": "An internal error occurred during the fuzzy logic analysis. The expert system failed to compute a result.", 
+            "advice": "Try restarting the assessment or contact technical support if the issue persists.",
+            "crisp_risk_value": 0.0,
+            "best_membership": 0.0
+        }
+
+    # 3. PROFESSIONAL DIAGNOSIS GENERATION
+    
+    # Map the fuzzy output to a human-readable primary diagnosis
+    primary_diagnosis = best_match.replace('_', ' ').title()
+    if 'Risk' in primary_diagnosis:
+        primary_diagnosis = primary_diagnosis.replace('Risk', 'Tendency')
+    if 'Distress' in primary_diagnosis:
+        primary_diagnosis = primary_diagnosis.replace('Distress', 'Distress/Overload')
+    if 'Elevated' in primary_diagnosis:
+        primary_diagnosis = primary_diagnosis.replace('Elevated', 'Significant')
+    
+    # --- Fuzzy Score Interpretation ---
+    fuzzy_explanation = (
+        f"Your calculated **Fuzzy Risk Score of {final_risk_value:.2f} (out of 10.00)** reflects the overall severity and co-occurrence "
+        "of all your reported symptoms. This score is a comprehensive metric used by the expert system to quantify your total mental "
+        "load, where higher values indicate greater systemic strain."
+    )
+    
+    # --- Diagnosis-Specific Explanations ---
+    if best_match == 'minimal_concern':
+        title = "Minimal Concern: Current Wellness Level Appears Resilient"
+        summary = (
+            "The assessment indicates your responses fall within a **range of optimal emotional and cognitive balance**. "
+            "Your reported scores suggest high resilience and effective coping mechanisms."
+        )
+        correlates = (
+            "**Clinical Correlates:** Your scores for **Mood** and **Motivation** were highly favorable, suggesting consistent emotional well-being and drive."
+        )
+        advice = (
+            "Continue your current practices of self-care and stress management. Maintaining consistent **sleep hygiene** and "
+            "engaging in regular fulfilling activities are key to long-term wellness."
+        )
+    elif best_match == 'elevated_fatigue':
+        title = "Significant Fatigue Tendency: Focus on Restorative Energy"
+        summary = (
+            "Your results show a **pronounced pattern of high tiredness and low-quality/short sleep**. This suggests a deficit in "
+            "restorative rest, which significantly impacts daytime energy and cognitive function. This level of fatigue warrants attention."
+        )
+        correlates = (
+            f"**Clinical Correlates:** This diagnosis is directly influenced by your reported **{symptom_data.get('tiredness', 'Tiredness (High)')}** and **{symptom_data.get('sleep_quality', 'Sleep Quality (Low)')}**. This pattern points towards a state of chronic low energy."
+        )
+        advice = (
+            "Prioritize **strict sleep hygiene** (consistent schedule, reducing screen time before bed). If this fatigue persists "
+            "despite improving sleep, consult a healthcare professional to rule out underlying physical conditions."
+        )
+    elif best_match == 'stress_distress':
+        title = "Stress and General Distress/Overload: Elevated System Strain"
+        summary = (
+            "The system detects a **high degree of generalized stress and mental strain**, linked to reported workload and worry. "
+            "This state of sustained emotional pressure can lead to chronic mental and physical health issues if not addressed."
+        )
+        correlates = (
+            f"**Clinical Correlates:** The primary drivers are your scores for **Workload** ({inputs.get('workload')}/10) and **Worry** ({inputs.get('worry')}/10). The combination of external demand and internal rumination is creating the distress."
+        )
+        advice = (
+            "Focus on **active stress management**: implement boundary setting, engage in daily mindfulness or deep-breathing exercises, "
+            "and dedicate time for emotional recovery. If distress is interfering with daily life, consider professional guidance."
+        )
+    elif best_match == 'anxiety_risk':
+        title = "Anxiety Tendency: Elevated State of Hyper-Arousal"
+        summary = (
+            "Your responses indicate a **significant pattern of recurring worry and panic**, suggesting your nervous system is frequently "
+            "in a state of hyper-arousal. This tendency can manifest as physical tension, difficulty concentrating, and restlessness."
+        )
+        correlates = (
+            f"**Clinical Correlates:** The diagnosis is closely tied to your elevated reports of **Worry** ({inputs.get('worry')}/10) and **Panic** ({inputs.get('panic')}/10). These are hallmark symptoms of an anxiety spectrum vulnerability."
+        )
+        advice = (
+            "Practice **grounding techniques and controlled, slow breathing** to regulate the nervous system. If anxiety or panic attacks "
+            "are frequent or interfere with daily life, immediate consultation with a mental health professional specializing in anxiety "
+            "disorders is highly recommended."
+        )
+    elif best_match == 'depressive_risk':
+        title = "Depressive Tendency: Mood and Interest Deficiency"
+        summary = (
+            "There is a **noticeable co-occurrence of low mood, reduced interest, and lack of motivation**. This pattern is a key indicator "
+            "of potential depressive symptoms (anhedonia and dysphoria), suggesting a need for deeper evaluation."
+        )
+        correlates = (
+            f"**Clinical Correlates:** This risk is primarily driven by your scores for **Mood** ({inputs.get('mood')}/10), **Interest** ({inputs.get('interest')}/10), and **Motivation** ({inputs.get('motivation')}/10) all registering in the low-to-moderate range. This triad is a critical signal."
+        )
+        advice = (
+            "It is vital to **re-engage in previously enjoyable activities**—even small steps. Seek an evaluation from a licensed "
+            "mental health expert if these symptoms of low mood and interest persist for more than two weeks."
+        )
+    elif best_match == 'burnout_risk':
+        title = "Burnout Tendency: Chronic Exhaustion and Cynicism"
+        summary = (
+            "The combination of **high workload, high exhaustion, and critically low motivation** strongly suggests a risk of occupational or "
+            "role-related **Burnout Syndrome**. This is a state of chronic, unresolved stress leading to emotional and physical depletion."
+        )
+        correlates = (
+            f"**Clinical Correlates:** This pattern is defined by the concurrent reporting of **Workload** ({inputs.get('workload')}/10), **Tiredness** ({inputs.get('tiredness')}/10), and notably low **Motivation** ({inputs.get('motivation')}/10). This points to an exhaustion-cynicism profile."
+        )
+        advice = (
+            "Immediate and proactive attention to **work-life balance** is mandatory. This may require taking a complete break, "
+            "delegating tasks, or seeking organizational support. **Professional coaching** or therapy focused on boundary setting is highly advised."
+        )
+    else:
+        title = "Mixed Pattern: Non-Dominant or Generalized Stress"
+        summary = (
+            "The system processed your inputs, but the resulting pattern is **unclear or highly mixed**. This means no single risk factor "
+            "strongly dominates the others, or your symptoms are generally mild. This often suggests generalized, low-level stress."
+        )
+        correlates = (
+            "**Clinical Correlates:** Your scores showed moderate fluctuations across multiple domains without one single factor being critically high or low."
+        )
+        advice = (
+            "Continue to monitor your symptoms. A mixed pattern may indicate mild, generalized stress. If your symptoms intensify or "
+            "coalesce into a clear pattern, retake the assessment or seek professional advice."
+        )
+        
+    # Final result structure
+    return {
+        "diagnosis": title,
+        "explanation": f"{summary}\n\n**{correlates}**",
+        "advice": advice,
+        "crisp_risk_value": final_risk_value,
+        "best_membership": best_membership,
+        "fuzzy_explanation": fuzzy_explanation # New field for the final display
     }
     
 # ====================== Chatbot & Input Handling (Crucially simplified) ======================
