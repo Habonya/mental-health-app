@@ -41,7 +41,7 @@ def _ensure_defaults():
         "motivation": 5,
         "last_diagnosis": None,
         "result": None,
-        "messages": [{"role": "assistant", "content": "Welcome! I'm here to guide you through a brief self-assessment. Please answer the following questions on a scale from **1 (Very Low/Poor/Never)** to **10 (Very High/Good/Always)**, or by giving a specific number for hours."}],
+        "messages": [{"role": "assistant", "content": "Welcome! I'm here to guide you through a brief self-assessment. Please answer the following questions on a scale from 1 (Very Low/Poor/Never) to 10 (Very High/Good/Always), or by giving a specific number for hours."}],
         "chat_index": 0,
         "questions_asked": True,
     }
@@ -159,29 +159,30 @@ def fuzzy_infer_diagnosis(inputs):
     # 3. HUMAN-LIKE DIAGNOSIS GENERATION
     
     # Map the fuzzy output to a human-readable primary diagnosis
+    """
     primary_diagnosis = best_match.replace('_', ' ').title().replace('Risk', 'Tendency').replace('Distress', 'Distress/Overload').replace('Elevated', 'Significant')
     
     # Generate a descriptive summary based on the primary diagnosis
     if best_match == 'minimal_concern':
-        summary = "The assessment suggests your current responses fall within a **range of minimal concern** for common mental health challenges. You appear to be managing your well-being effectively."
+        summary = "The assessment suggests your current responses fall within a range of minimal concern for common mental health challenges. You appear to be managing your well-being effectively."
         advice = "Continue to practice good self-care, monitor your mood and energy, and don't hesitate to reach out if things change."
     elif best_match == 'elevated_fatigue':
-        summary = f"Based on the analysis, there is a **significant indication of elevated fatigue/low energy** (Membership: ${best_membership:.2f}$). This is often tied to your reported sleep quality and general tiredness."
+        summary = f"Based on the analysis, there is a significant indication of elevated fatigue/low energy (Membership: ${best_membership:.2f}$). This is often tied to your reported sleep quality and general tiredness."
         advice = "Focus on **sleep hygiene** (consistent schedule, dark room) and energy management. If persistent, this could be a sign of an underlying physical or mental health issue that warrants a check-up."
     elif best_match == 'stress_distress':
-        summary = f"The results suggest a **high level of stress or general distress** (Membership: ${best_membership:.2f}$). This is particularly related to the reported level of worry and workload, leading to a state of emotional and mental strain."
-        advice = "Prioritize **stress reduction techniques** like mindfulness, setting firmer boundaries around work, and scheduling dedicated time for relaxation. If your distress is interfering with daily life, consider professional guidance."
+        summary = f"The results suggest a high level of stress or general distress (Membership: ${best_membership:.2f}$). This is particularly related to the reported level of worry and workload, leading to a state of emotional and mental strain."
+        advice = "Prioritize stress reduction techniques like mindfulness, setting firmer boundaries around work, and scheduling dedicated time for relaxation. If your distress is interfering with daily life, consider professional guidance."
     elif best_match == 'anxiety_risk':
-        summary = f"There is a **noticeable tendency toward anxiety** (Membership: ${best_membership:.2f}$), strongly linked to your self-reported levels of worry and, possibly, panic. This suggests your system may be in a state of hyper-arousal."
-        advice = "Engage in controlled **breathing exercises** and grounding techniques. If panic attacks are a concern, immediate professional consultation with a therapist specializing in anxiety is highly recommended."
+        summary = f"There is a noticeable tendency toward anxiety (Membership: ${best_membership:.2f}$), strongly linked to your self-reported levels of worry and, possibly, panic. This suggests your system may be in a state of hyper-arousal."
+        advice = "Engage in controlled breathing exercises and grounding techniques. If panic attacks are a concern, immediate professional consultation with a therapist specializing in anxiety is highly recommended."
     elif best_match == 'depressive_risk':
-        summary = f"The assessment indicates a **potential depressive tendency** (Membership: ${best_membership:.2f}$), given the co-occurrence of low mood, reduced interest, and low motivation."
-        advice = "It is crucial to **break the isolation cycle** by engaging in light activities, even when you don't feel like it. Seek an evaluation from a mental health expert if these symptoms persist for more than two weeks."
+        summary = f"The assessment indicates a **potential depressive tendency (Membership: ${best_membership:.2f}$), given the co-occurrence of low mood, reduced interest, and low motivation."
+        advice = "It is crucial to break the isolation cycle by engaging in light activities, even when you don't feel like it. Seek an evaluation from a mental health expert if these symptoms persist for more than two weeks."
     elif best_match == 'burnout_risk':
-        summary = f"The pattern of high workload, high tiredness, and critically low motivation points to a **strong risk of occupational burnout** (Membership: ${best_membership:.2f}$). This is a state of chronic workplace stress."
-        advice = "Immediate attention to **work-life balance** is necessary. This may involve taking time off, delegating tasks, or seeking support to manage professional demands. Burnout requires dedicated recovery and often professional coaching."
+        summary = f"The pattern of high workload, high tiredness, and critically low motivation points to a strong risk of occupational burnout (Membership: ${best_membership:.2f}$). This is a state of chronic workplace stress."
+        advice = "Immediate attention to work-life balance is necessary. This may involve taking time off, delegating tasks, or seeking support to manage professional demands. Burnout requires dedicated recovery and often professional coaching."
     else:
-        summary = "The fuzzy logic system processed your inputs, but the resulting pattern is **unclear or highly mixed**. This means no single risk factor strongly dominates the others, or your symptoms are too mild across the board to generate a definitive primary diagnosis."
+        summary = "The fuzzy logic system processed your inputs, but the resulting pattern is unclear or highly mixed. This means no single risk factor strongly dominates the others, or your symptoms are too mild across the board to generate a definitive primary diagnosis."
         advice = "Continue to monitor your symptoms. A mixed pattern may indicate mild, generalized stress. If your symptoms worsen, retake the assessment or seek professional advice."
 
     # Factual Enhancement: Include the most dominant symptoms as context
@@ -197,6 +198,107 @@ def fuzzy_infer_diagnosis(inputs):
         "crisp_risk_value": final_risk_value,
         "best_membership": best_membership
     }
+    """
+    # 3. HUMAN-LIKE DIAGNOSIS GENERATION
+
+# Map the fuzzy output to a human-readable primary diagnosis
+primary_diagnosis = best_match.replace('_', ' ').title().replace('Risk', 'Tendency').replace('Distress', 'Distress/Overload').replace('Elevated', 'Significant')
+
+# Generate a descriptive, therapist-like summary with references
+if best_match == 'minimal_concern':
+    summary = (
+        "Based on your responses, your mental and emotional state is within a healthy range, with minimal concern for significant mental health challenges. "
+        "According to NHS guidelines, individuals with low levels of stress, anxiety, or depressive symptoms generally report balanced sleep, stable mood, and adequate energy levels. "
+        "Your answers suggest you are managing your well-being effectively."
+    )
+    advice = (
+        "Maintain your mental wellness by practicing regular self-care, monitoring your mood, and reaching out for support if you notice any changes."
+    )
+
+elif best_match == 'elevated_fatigue':
+    summary = (
+        f"You show signs of elevated fatigue or low energy (membership/confidence: {best_membership:.2f}). "
+        "This membership value represents the system’s confidence that your reported tiredness and sleep patterns are significant indicators. "
+        "Common symptoms of fatigue, according to mental health guidance (e.g., NHS), include persistent tiredness, reduced concentration, and low motivation. "
+        f"Your reported sleep quality of {inputs.get('sleep_quality')} and tiredness score of {inputs.get('tiredness')} suggest these patterns."
+    )
+    advice = (
+        "Focus on good sleep hygiene (consistent schedule, dark and quiet room), manage your energy throughout the day, "
+        "and consult a healthcare professional if fatigue continues or worsens."
+    )
+
+elif best_match == 'stress_distress':
+    summary = (
+        f"You display patterns commonly associated with stress and general distress (membership/confidence: {best_membership:.2f}). "
+        "According to NHS and WHO guidelines, common indicators of stress include high workload, difficulty relaxing, irritability, and persistent worry. "
+        f"Your self-reported workload score of {inputs.get('workload')} and worry score of {inputs.get('worry')} suggest that these factors are contributing significantly to your stress levels. "
+        "High membership indicates strong confidence that stress/distress is a dominant factor in your current state."
+    )
+    advice = (
+        "Try stress management strategies such as mindfulness, structured breaks, and prioritizing tasks. "
+        "If stress is significantly affecting your daily functioning, consider professional guidance from a mental health specialist."
+    )
+
+elif best_match == 'anxiety_risk':
+    summary = (
+        f"There is a noticeable tendency toward anxiety (membership/confidence: {best_membership:.2f}). "
+        "Per NHS resources, common anxiety symptoms include excessive worry, feeling restless, difficulty concentrating, and occasional panic episodes. "
+        f"Your responses show worry={inputs.get('worry')} and panic={inputs.get('panic')}, suggesting these symptoms are relevant to your situation."
+    )
+    advice = (
+        "Practice grounding exercises and controlled breathing techniques. "
+        "If panic attacks or persistent anxiety are a concern, seek support from a licensed therapist specializing in anxiety disorders."
+    )
+
+elif best_match == 'depressive_risk':
+    summary = (
+        f"Your responses indicate a potential depressive tendency (membership/confidence: {best_membership:.2f}). "
+        "NHS and general mental health guidelines list common symptoms as low mood, loss of interest in activities, fatigue, and reduced motivation. "
+        f"Your input on mood={inputs.get('mood')}, interest={inputs.get('interest')}, and motivation={inputs.get('motivation')} align with these symptoms. "
+        "Higher membership indicates a stronger confidence that depressive tendencies are present."
+    )
+    advice = (
+        "Engage in regular light activities, maintain social interactions, and seek evaluation from a mental health professional if symptoms persist for more than two weeks."
+    )
+
+elif best_match == 'burnout_risk':
+    summary = (
+        f"You are showing a high risk of occupational or chronic stress-related burnout (membership/confidence: {best_membership:.2f}). "
+        "According to WHO, common burnout symptoms include extreme tiredness, detachment from work, reduced performance, and low motivation. "
+        f"Your responses—workload={inputs.get('workload')}, tiredness={inputs.get('tiredness')}, motivation={inputs.get('motivation')}—reflect these indicators. "
+        "High membership indicates strong confidence that burnout is a critical concern."
+    )
+    advice = (
+        "Prioritize rest, work-life balance, and support systems. Consider professional consultation if burnout symptoms are impacting daily functioning."
+    )
+
+else:
+    summary = (
+        "Your responses show a mixed pattern, with no single mental health concern strongly dominating. "
+        "This may reflect mild stress, general fatigue, or temporary fluctuations in mood and energy levels."
+    )
+    advice = (
+        "Maintain self-care, monitor your symptoms, and seek professional guidance if issues persist or worsen."
+    )
+
+# Include the most influential symptoms for context
+top_symptoms = [
+    k.replace('_', ' ').capitalize() 
+    for k, v in inputs.items() 
+    if (k != 'hours' and v >= 8) or (k in ['mood', 'interest', 'motivation', 'sleep_quality'] and v <= 3)
+]
+
+if top_symptoms:
+    summary += f" The assessment was particularly influenced by your high or low responses in: **{', '.join(top_symptoms)}**."
+
+return {
+    "diagnosis": primary_diagnosis,
+    "explanation": summary,
+    "advice": advice,
+    "crisp_risk_value": final_risk_value,
+    "best_membership": best_membership
+}
+
 
 # ====================== Chatbot & Input Handling (Crucially simplified) ======================
 QUESTIONS = [
