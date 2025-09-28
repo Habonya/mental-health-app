@@ -6,4 +6,5 @@ numpy
 matplotlib
 pandas
 scikit-learn
-networkx
+network
+joblib
