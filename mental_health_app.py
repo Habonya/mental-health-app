@@ -6,8 +6,49 @@ from skfuzzy import control as ctrl
 import joblib
 
 # Load ML model and encoder
-rf_model = joblib.load("mental_health_model.pkl")
-label_encoder = joblib.load("label_encoder.pkl")
+# NOTE: Assumes 'mental_health_model.pkl' and 'label_encoder.pkl' exist in the execution directory
+try:
+    rf_model = joblib.load("mental_health_model.pkl")
+    label_encoder = joblib.load("label_encoder.pkl")
+except FileNotFoundError:
+    st.error("Error: Could not find ML model or encoder files. Please ensure 'mental_health_model.pkl' and 'label_encoder.pkl' are present.")
+    rf_model = None
+    label_encoder = None
+
+
+# ====================== LICENSED MENTAL HEALTH RESOURCES ======================
+# Dictionary mapping the system's internal risk categories to external licensed resources.
+MENTAL_HEALTH_RESOURCES = {
+    'minimal_concern': {
+        'link': 'https://www.helpguide.org/articles/mental-health/mental-wellness.htm',
+        'text': 'Maintaining Wellness (HelpGuide.org)'
+    },
+    'elevated_fatigue': {
+        'link': 'https://www.cdc.gov/sleep/about-sleep/sleep-hygiene.html',
+        'text': 'Sleep Hygiene and Fatigue (CDC)'
+    },
+    'stress_distress': {
+        'link': 'https://www.nimh.nih.gov/health/topics/stress',
+        'text': 'Stress Management (NIMH)'
+    },
+    'anxiety_risk': {
+        'link': 'https://adaa.org/understanding-anxiety',
+        'text': 'Understanding Anxiety (ADAA)'
+    },
+    'depressive_risk': {
+        'link': 'https://www.nimh.nih.gov/health/topics/depression',
+        'text': 'Understanding Depression (NIMH)'
+    },
+    'burnout_risk': {
+        'link': 'https://www.who.int/news/item/28-05-2019-burn-out-an-occupational-phenomenon-international-classification-of-diseases',
+        'text': 'Burnout Syndrome (WHO ICD-11)'
+    },
+    'default': {
+        'link': 'https://www.nami.org/About-Mental-Illness/Warning-Signs-and-Symptoms',
+        'text': 'General Mental Health Information (NAMI)'
+    }
+}
+# ==============================================================================
 
 
 # ====================== UI Setup ======================
@@ -65,9 +106,7 @@ def reset_assessment():
 # ====================== Fuzzy System Setup ======================
 
 # Antecedents (Inputs)
-# Hours can be a crisp input (number) so its universe remains standard.
 hours = ctrl.Antecedent(np.arange(0, 13, 1), 'hours')
-# All other subjective inputs are now simply a 0-10 scale
 sleep_quality = ctrl.Antecedent(np.arange(0, 11, 1), 'sleep_quality')
 mood = ctrl.Antecedent(np.arange(0, 11, 1), 'mood')
 interest = ctrl.Antecedent(np.arange(0, 11, 1), 'interest')
@@ -154,7 +193,9 @@ def fuzzy_infer_diagnosis(inputs):
             "explanation": "The analysis could not be completed because one or more input values were missing. Please ensure all questions are answered.", 
             "advice": "Please complete the full assessment.",
             "crisp_risk_value": 0.0,
-            "best_membership": 0.0
+            "best_membership": 0.0,
+            "resource_link": MENTAL_HEALTH_RESOURCES['default']['link'],
+            "resource_text": MENTAL_HEALTH_RESOURCES['default']['text']
         }
 
     # 2. FUZZY COMPUTATION
@@ -183,7 +224,9 @@ def fuzzy_infer_diagnosis(inputs):
             "explanation": "An internal error occurred during the fuzzy logic analysis. The expert system failed to compute a result.", 
             "advice": "Try restarting the assessment or contact technical support if the issue persists.",
             "crisp_risk_value": 0.0,
-            "best_membership": 0.0
+            "best_membership": 0.0,
+            "resource_link": MENTAL_HEALTH_RESOURCES['default']['link'],
+            "resource_text": MENTAL_HEALTH_RESOURCES['default']['text']
         }
 
     # 3. PROFESSIONAL DIAGNOSIS GENERATION
@@ -298,6 +341,10 @@ def fuzzy_infer_diagnosis(inputs):
             "coalesce into a clear pattern, retake the assessment or seek professional advice."
         )
         
+    # --- Add External Resource Link ---
+    # Get the resource link based on the best match
+    resource_info = MENTAL_HEALTH_RESOURCES.get(best_match, MENTAL_HEALTH_RESOURCES['default'])
+
     # Final result structure
     return {
         "diagnosis": title,
@@ -305,7 +352,10 @@ def fuzzy_infer_diagnosis(inputs):
         "advice": advice,
         "crisp_risk_value": final_risk_value,
         "best_membership": best_membership,
-        "fuzzy_explanation": fuzzy_explanation # New field for the final display
+        "fuzzy_explanation": fuzzy_explanation, # New field for the final display
+        # NEW FIELDS ADDED
+        "resource_link": resource_info['link'],
+        "resource_text": resource_info['text']
     }
     
 # ====================== Chatbot & Input Handling (Crucially simplified) ======================
@@ -439,6 +489,13 @@ custom_css = """
         font-size: 1.1rem;
         line-height: 1.6;
     }
+    .resource-card {
+        background-color:#E0F7FA; 
+        border:2px solid #00BCD4; 
+        border-radius:15px; 
+        padding:15px; 
+        margin-top:15px;
+    }
 </style>
 """
 st.markdown(custom_css, unsafe_allow_html=True)
@@ -491,68 +548,59 @@ else:
 # ====================== Results Display ======================
 if st.session_state.result:
     res = st.session_state.result
+    st.session_state.last_diagnosis = res['diagnosis'] # Save for continuity
     st.markdown("---")
     
     # ================== Robust ML Prediction ==================
-    ml_label_map = {
-        'minimal_concern': 'Minimal Concern',
-        'elevated_fatigue': 'Elevated Fatigue',
-        'stress_distress': 'Stress/Distress',
-        'anxiety_risk': 'Anxiety Tendency',
-        'depressive_risk': 'Depressive Tendency',
-        'burnout_risk': 'Burnout Risk'
-    }
+    if rf_model and label_encoder:
+        ml_label_map = {
+            'minimal_concern': 'Minimal Concern',
+            'elevated_fatigue': 'Elevated Fatigue',
+            'stress_distress': 'Stress/Distress',
+            'anxiety_risk': 'Anxiety Tendency',
+            'depressive_risk': 'Depressive Tendency',
+            'burnout_risk': 'Burnout Risk'
+        }
 
-    # Define a priority list for “closest match” in case of unexpected label
-    # The original implementation of 'closest match' was highly flawed,
-    # simply defaulting to the first item ('minimal_concern').
-    # I've kept the logic structure but noted the original issue.
-    # A proper fallback would require a measure of distance in the feature space.
-    fallback_order = ['minimal_concern', 'elevated_fatigue', 'stress_distress', 
-                      'anxiety_risk', 'depressive_risk', 'burnout_risk']
+        fallback_order = ['minimal_concern', 'elevated_fatigue', 'stress_distress', 
+                          'anxiety_risk', 'depressive_risk', 'burnout_risk']
 
-    # Prepare features for ML model
-    inputs = {key: st.session_state.get(key) for key, _ in QUESTIONS}
-    features = [
-        inputs['sleep_quality'],
-        inputs['hours'],
-        inputs['mood'],
-        inputs['interest'],
-        inputs['worry'],
-        inputs['panic'],
-        inputs['workload'],
-        inputs['tiredness'],
-        inputs['motivation']
-    ]
-    X_input = [features]
+        # Prepare features for ML model
+        inputs = {key: st.session_state.get(key) for key, _ in QUESTIONS}
+        features = [
+            inputs['sleep_quality'],
+            inputs['hours'],
+            inputs['mood'],
+            inputs['interest'],
+            inputs['worry'],
+            inputs['panic'],
+            inputs['workload'],
+            inputs['tiredness'],
+            inputs['motivation']
+        ]
+        X_input = [features]
 
-    # Predict with ML model
-    y_pred = rf_model.predict(X_input)
-    # Decode the prediction label
-    # NOTE: The original code used the raw string of the prediction from the model
-    # (which would be a stringified number if the model output was encoded).
-    # Since the full context of the ML model output is unknown, the safe mapping is used.
-    # Assuming y_pred[0] is one of the keys in ml_label_map.
-    y_pred_str = str(y_pred[0])
+        # Predict with ML model
+        y_pred = rf_model.predict(X_input)
+        y_pred_str = str(y_pred[0])
 
-    # Map prediction safely; if unknown, pick the closest in fallback_order (or default to the first)
-    ml_prediction = ml_label_map.get(
-        y_pred_str,
-        ml_label_map[fallback_order[min(range(len(fallback_order)), key=lambda i: abs(i - 0))]]
-    )
+        ml_prediction = ml_label_map.get(
+            y_pred_str,
+            ml_label_map[fallback_order[min(range(len(fallback_order)), key=lambda i: abs(i - 0))]]
+        )
 
-    # ML Prediction Card
-    st.markdown(
-        f"""
-        <div style="background-color:#F0F4C3; border:2px solid #8BC34A; 
-                    border-radius:15px; padding:20px; margin-top:20px;">
-            <h3 style="color:#33691E;">🤖 Machine Learning Model Prediction</h3>
-            <p><b>Prediction:</b> {ml_prediction}</p>
-            <p>This is based on statistical training with your input values.</p>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+        # ML Prediction Card
+        st.markdown(
+            f"""
+            <div style="background-color:#F0F4C3; border:2px solid #8BC34A; 
+                        border-radius:15px; padding:20px; margin-top:20px;">
+                <h3 style="color:#33691E;">🤖 Machine Learning Model Prediction</h3>
+                <p><b>Prediction:</b> {ml_prediction}</p>
+                <p>This is based on statistical training with your input values.</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
     # Diagnosis in a nice card
     st.markdown(
@@ -565,6 +613,19 @@ if st.session_state.result:
         """,
         unsafe_allow_html=True
     )
+
+    # ================== NEW: Licensed Resource Link Card ==================
+    st.markdown(
+        f"""
+        <div class="resource-card">
+            <h4 style="color:#00838F; margin-top:0;">📚 For More Information & Validation</h4>
+            <p>To learn more about the concepts related to your result, please consult a licensed organization:</p>
+            <p style="font-weight:bold; margin-bottom:0;"><a href="{res['resource_link']}" target="_blank">🔗 {res['resource_text']}</a></p>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+    # ======================================================================
 
     # Display additional metrics
     col1, col2 = st.columns(2)
